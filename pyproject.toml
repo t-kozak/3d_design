@@ -1,0 +1,35 @@
+[project]
+dependencies = [
+    "cadquery>=2.5.2",
+    "CQ-editor>=0.5.0",
+    "jupyter-cadquery>=4.0.2",
+    "jupyter",
+    "svgpathtools>=1.7.1",
+]
+
+name = "3dprinting_design"
+version = "0.1.0"
+description = "Local Experiments with CadQuery"
+requires-python = ">=3.11,<4"
+
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+lint.select = [
+    "E", # pycodestyle errors
+    "W", # pycodestyle warnings
+    "F", # pyflakes
+    "I", # isort
+    "B", # flake8-bugbear
+]
+
+[tool.uv.sources]
+
+
+[tool.pytest.ini_options]
+log_level = "DEBUG"
+pythonpath = ["src"]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
