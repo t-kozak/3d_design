@@ -5,6 +5,9 @@ dependencies = [
     "jupyter-cadquery>=4.0.2",
     "jupyter",
     "svgpathtools>=1.7.1",
+    "ocp_tessellate",
+    "ocp_vscode",
+    "ipykernel"
 ]
 
 name = "3dprinting_design"
