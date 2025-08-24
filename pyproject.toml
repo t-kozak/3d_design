@@ -7,7 +7,11 @@ dependencies = [
     "svgpathtools>=1.7.1",
     "ocp_tessellate",
     "ocp_vscode",
-    "ipykernel"
+    "ipykernel",
+    "Pillow>=10.0.0",
+    "numpy>=1.24.0",
+    "tqdm>=4.65.0",
+    "numpy-stl>=3.2.0",
 ]
 
 name = "3dprinting_design"
