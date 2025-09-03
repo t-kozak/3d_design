@@ -1,9 +1,14 @@
 from dataclasses import dataclass
 import math
 import random
+
 import cadquery as cq
-from .tex_details import TextureDetails
+from stopwatch import Stopwatch
+
+from ..merge import merge_shapes_in_batches_threaded
+
 from ..workplane import Workplane
+from .tex_details import TextureDetails
 
 try:
     from tqdm import tqdm  # pyright: ignore[reportAssignmentType]
@@ -284,21 +289,20 @@ def _line_segments_intersect(
     return 0 <= t <= 1 and 0 <= u <= 1
 
 
-def _generate_hex_texture_for_face(
+def _calculate_hex_grid(
     face: cq.Face,
     details: HoneycombTexture,
-    show_progress: bool = False,
-) -> tuple[Workplane, cq.Vector, cq.Vector] | None:
+    u_vec: cq.Vector,
+    v_vec: cq.Vector,
+) -> tuple[int, int, float, float, float, float, float, float]:
     """
-    Generate hexagonal texture positioned and oriented for a specific face.
-    """
+    Calculate the grid dimensions and spacing for hexagonal texture on a face.
 
-    # Get face center and normal
+    Returns:
+        Tuple of (rows, cols, x_spacing, y_spacing, face_width, face_height, half_width, half_height)
+    """
+    # Get face center
     face_center = face.Center()
-    face_normal = face.normalAt()  # type: ignore
-
-    # Create proper coordinate system for the face
-    u_vec, v_vec = _get_face_coordinate_system(face_normal, details)
 
     # Calculate face dimensions in the texture coordinate system
     # Project face vertices onto the texture plane to get accurate dimensions
@@ -343,6 +347,40 @@ def _generate_hex_texture_for_face(
         f"Hex texture grid: {cols} columns × {rows} rows = {cols * rows} potential positions"
     )
 
+    half_width = face_width / 2
+    half_height = face_height / 2
+
+    return (
+        rows,
+        cols,
+        x_spacing,
+        y_spacing,
+        face_width,
+        face_height,
+        half_width,
+        half_height,
+    )
+
+
+def _create_height_groups(
+    face: cq.Face,
+    details: HoneycombTexture,
+    rows: int,
+    cols: int,
+    x_spacing: float,
+    y_spacing: float,
+    half_width: float,
+    half_height: float,
+    face_center: cq.Vector,
+    u_vec: cq.Vector,
+    v_vec: cq.Vector,
+) -> dict[float, list[tuple[cq.Vector, float, float]]]:
+    """
+    Create height groups by iterating over rows and columns to determine hexagon positions and heights.
+
+    Returns:
+        Dictionary mapping discretized heights to lists of (world_pos, local_x, local_y) tuples
+    """
     # Discretize heights
     height_range = details.hex_height_max - details.hex_height_min
     height_step_size = (
@@ -351,9 +389,6 @@ def _generate_hex_texture_for_face(
 
     # Group positions by discretized height
     height_groups = {}
-
-    half_width = face_width / 2
-    half_height = face_height / 2
 
     rng = random.Random(details.random_seed)
 
@@ -377,6 +412,9 @@ def _generate_hex_texture_for_face(
 
     print(f"Will generate {hex_count} hexagons")
 
+    # Start timing hexagon generation
+    generation_timer = Stopwatch()
+    generation_timer.start()
     # Now actually generate the hexagons
     for row in range(rows):
         for col in range(cols):
@@ -416,14 +454,34 @@ def _generate_hex_texture_for_face(
                     height_groups[discretized_height] = []
                 height_groups[discretized_height].append((world_pos, local_x, local_y))
 
-    if not height_groups:
-        return None
+    # Print hexagon generation timing
+    print(f"Hexagon generation completed in {generation_timer.elapsed:.2f} seconds")
 
-    # Create hexagons at the face location and orientation
-    result = None
+    return height_groups
+
+
+def _generate_surface_from_height_groups(
+    height_groups: dict[float, list[tuple[cq.Vector, float, float]]],
+    face: cq.Face,
+    details: HoneycombTexture,
+    face_center: cq.Vector,
+    u_vec: cq.Vector,
+    v_vec: cq.Vector,
+    show_progress: bool,
+) -> Workplane | None:
+    """
+    Generate the actual 3D surface from height groups by creating hexagons.
+
+    Returns:
+        Workplane containing all the generated hexagons, or None if no hexagons were created
+    """
+    all_hex_shapes = []
 
     for batch_height, positions in height_groups.items():
         if not positions:
+            continue
+
+        if batch_height == 0:
             continue
 
         # Create workplane aligned with the face
@@ -436,7 +494,7 @@ def _generate_hex_texture_for_face(
 
         # Create all hexagons for this height level with progress bar
         progress_desc = f"Generating hexagons (height={batch_height:.1f})"
-        for world_pos, local_x, local_y in tqdm(
+        for _, local_x, local_y in tqdm(
             positions, desc=progress_desc, disable=not show_progress
         ):
             try:
@@ -446,14 +504,84 @@ def _generate_hex_texture_for_face(
                     .polygon(6, details.hex_side_len)
                     .extrude(batch_height)  # Extrude along the face normal
                 )
-
-                if result is None:
-                    result = hex_shape
-                else:
-                    result = result.union(hex_shape)
+                all_hex_shapes.append(hex_shape)
             except Exception as e:
                 print(f"Warning: Could not create hexagon at {local_x}, {local_y}: {e}")
                 continue
 
-    assert result is not None
+    # Merge all hex shapes using tree-based batching with multi-threading
+    if show_progress:
+        print(
+            f"Merging {len(all_hex_shapes)} hexagons using threaded tree-based batching..."
+        )
+
+    # Start timing the merge operation
+    merge_timer = Stopwatch()
+    merge_timer.start()
+    result = merge_shapes_in_batches_threaded(
+        all_hex_shapes, show_progress=show_progress
+    )
+
+    # Print merge timing
+    merge_time = merge_timer.elapsed
+    if show_progress:
+        print(f"Merge operation completed in {merge_time:.2f} seconds")
+
+    return result
+
+
+def _generate_hex_texture_for_face(
+    face: cq.Face,
+    details: HoneycombTexture,
+    show_progress: bool = False,
+) -> tuple[Workplane, cq.Vector, cq.Vector] | None:
+    """
+    Generate hexagonal texture positioned and oriented for a specific face.
+    """
+
+    # Get face center and normal
+    face_center = face.Center()
+    face_normal = face.normalAt()  # type: ignore
+
+    # Create proper coordinate system for the face
+    u_vec, v_vec = _get_face_coordinate_system(face_normal, details)
+
+    # Calculate grid dimensions and spacing
+    (
+        rows,
+        cols,
+        x_spacing,
+        y_spacing,
+        _,
+        __,
+        half_width,
+        half_height,
+    ) = _calculate_hex_grid(face, details, u_vec, v_vec)
+
+    # Create height groups by iterating over the grid
+    height_groups = _create_height_groups(
+        face,
+        details,
+        rows,
+        cols,
+        x_spacing,
+        y_spacing,
+        half_width,
+        half_height,
+        face_center,
+        u_vec,
+        v_vec,
+    )
+
+    if not height_groups:
+        return None
+
+    # Generate the surface from height groups
+    result = _generate_surface_from_height_groups(
+        height_groups, face, details, face_center, u_vec, v_vec, show_progress
+    )
+
+    if result is None:
+        return None
+
     return result, u_vec, v_vec

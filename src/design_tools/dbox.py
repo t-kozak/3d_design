@@ -139,9 +139,10 @@ class ParametricDrawerBox:
             HoneycombTexture(
                 hex_side_len=10,
                 hex_height_min=1,
-                hex_height_max=6,
+                hex_height_max=3,
                 random_seed=42,
                 spacing_coefficient=0.85,
+                height_steps=3,
             ),
             show_progress=True,
         )

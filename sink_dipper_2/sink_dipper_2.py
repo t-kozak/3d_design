@@ -4,7 +4,7 @@ from pathlib import Path
 import cadquery as cq
 from ocp_vscode import show
 
-from workplane import Workplane
+from design_tools.workplane import Workplane
 
 assert show is not None
 
@@ -68,7 +68,9 @@ def make_holder_triangle(left: bool) -> Workplane:
         .fillet(1)
     )
 
-    groove_profile = Workplane("XZ").rect(d.groove_width, d.groove_thickness, centered=False)
+    groove_profile = Workplane("XZ").rect(
+        d.groove_width, d.groove_thickness, centered=False
+    )
     groove_path = Workplane("YZ").lineTo(d.base_length, d.base_max_height)
 
     sheet_groove = groove_profile.sweep(groove_path).translate(
@@ -124,9 +126,9 @@ def make_holder_triangle(left: bool) -> Workplane:
 def main():
     left = make_holder_triangle(True)
     right = make_holder_triangle(False)
-    sampler = make_holder_triangle(False).rotate((0, 0, 0), (0, 1, 0), 90) - Workplane("YZ").rect(
-        200, 200, centered=False
-    ).extrude(200).translate((-10, 30, 0))
+    sampler = make_holder_triangle(False).rotate((0, 0, 0), (0, 1, 0), 90) - Workplane(
+        "YZ"
+    ).rect(200, 200, centered=False).extrude(200).translate((-10, 30, 0))
 
     ass = cq.Assembly()
 

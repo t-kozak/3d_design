@@ -3,7 +3,7 @@ from .hex import HoneycombTexture, add_hex_texture_to_faces
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ..workplane import Workplane
+    from workplane import Workplane
 
 
 def add_texture(

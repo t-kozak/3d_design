@@ -21,6 +21,7 @@ dependencies = [
     { name = "ocp-tessellate" },
     { name = "ocp-vscode" },
     { name = "pillow" },
+    { name = "python-stopwatch" },
     { name = "svgpathtools" },
     { name = "tqdm" },
 ]
@@ -37,6 +38,7 @@ requires-dist = [
     { name = "ocp-tessellate" },
     { name = "ocp-vscode" },
     { name = "pillow", specifier = ">=10.0.0" },
+    { name = "python-stopwatch", specifier = ">=1.1.11" },
     { name = "svgpathtools", specifier = ">=1.7.1" },
     { name = "tqdm", specifier = ">=4.65.0" },
 ]
@@ -2498,6 +2500,28 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/87/c7/5e1547c44e31da50a460df93af11a535ace568ef89d7a811069ead340c4a/python-slugify-8.0.4.tar.gz", hash = "sha256:59202371d1d05b54a9e7720c5e038f928f45daaffe41dd10822f3907b937c856", size = 10921 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a4/62/02da182e544a51a5c3ccf4b03ab79df279f9c60c5e82d5e8bec7ca26ac11/python_slugify-8.0.4-py2.py3-none-any.whl", hash = "sha256:276540b79961052b66b7d116620b36518847f52d5fd9e3a70164fc8c50faa6b8", size = 10051 },
+]
+
+[[package]]
+name = "python-stopwatch"
+version = "1.1.11"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "python-tml" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/7c/3a/68c18be11ad5a84599ae3318f9659a46cc93ebb0322257a17f8e50441880/python_stopwatch-1.1.11.tar.gz", hash = "sha256:1a5f2de9dee1a5e27e415ded34aa6001bef20568601139bce9f06a358bb43df1", size = 7076 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/06/9a/c54779d7c8e0cdae3571c7e4f4afa4c551b327fb051bc734d8eb08ee1529/python_stopwatch-1.1.11-py3-none-any.whl", hash = "sha256:1d254d08712905e0c76edd2d742171f27ee70511c83a9b238b1d8b1d9fa5e9bf", size = 9052 },
+]
+
+[[package]]
+name = "python-tml"
+version = "1.0.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e4/0e/f039d151142bceae1409c11ace0b1683752a380a222ee0bc85e38f8cfffc/python_tml-1.0.2.tar.gz", hash = "sha256:f3f9b1bc324ad6a8cd2128b215691ada768906192a1f19ebb3e4ebb03874fa67", size = 4676 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b0/48/79565b58661a1a25c89f4b66ce17044d675c0cc787d46e9b464f50190af9/python_tml-1.0.2-py3-none-any.whl", hash = "sha256:f53fa57f154a36a5b0e2740eb081043fe8792e3bbe2434a3c0c478152907121c", size = 5376 },
 ]
 
 [[package]]
