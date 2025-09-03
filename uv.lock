@@ -9,7 +9,7 @@ resolution-markers = [
 [[package]]
 name = "3dprinting-design"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "cadquery" },
     { name = "cq-editor" },
