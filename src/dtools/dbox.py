@@ -4,7 +4,7 @@ import logging
 import time
 from typing import Literal
 
-from design_tools.texture.tex_details import TextureDetails
+from .texture.tex_details import TextureDetails
 from .texture import HoneycombTexture
 from .workplane import MScrew, Workplane
 from ocp_vscode import show
@@ -77,7 +77,7 @@ class ParametricDrawerBox:
         _log.debug(f"create_assembly completed in {elapsed_time:.3f} seconds")
         return ass
 
-    def create_drawer(self) -> Workplane:
+    def create_drawer(self, for_printing: bool = False) -> Workplane:
         start_time = time.time()
         _log.debug("Starting create_drawer")
 
@@ -140,7 +140,7 @@ class ParametricDrawerBox:
         _log.debug(f"create_drawer completed in {elapsed_time:.3f} seconds")
         return all
 
-    def create_box_base(self) -> Workplane:
+    def create_box_base(self, for_printing: bool = False) -> Workplane:
         start_time = time.time()
         _log.debug("Starting create_box_base")
 
@@ -207,7 +207,7 @@ class ParametricDrawerBox:
         _log.debug(f"create_box_base completed in {elapsed_time:.3f} seconds")
         return all
 
-    def create_box_top(self) -> Workplane:
+    def create_box_top(self, for_printing: bool = False) -> Workplane:
         start_time = time.time()
         _log.debug("Starting create_box_top")
 

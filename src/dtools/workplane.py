@@ -31,3 +31,26 @@ class Workplane(cq.Workplane):
         from .texture import add_texture
 
         return cast(Self, add_texture(self, details, show_progress))
+
+    def polar_move_to(self, phi: float, r: float, relative: bool = False) -> Self:
+        # Convert polar coordinates to Cartesian
+        x = r * math.cos(phi)
+        y = r * math.sin(phi)
+
+        if relative:
+            # Get current position and add the calculated offset
+            current_pos = self.plane.origin
+            x += current_pos.x
+            y += current_pos.y
+
+        # Delegate to base class moveTo method
+        return cast(Self, self.moveTo(x, y))
+
+    def get_center(self) -> cq.Vector:
+        val = self.val()
+        if isinstance(val, cq.Vector):
+            return val
+        elif isinstance(val, cq.Shape):
+            return val.BoundingBox().center
+        else:
+            raise ValueError(f"Invalid type: {type(val)}")
