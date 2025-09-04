@@ -9,6 +9,7 @@ import cadquery as cq
 from . import teardrop
 from . import heatserts
 from . import m_screw
+from . import parabolic
 
 if TYPE_CHECKING:
     from .texture import TextureDetails
@@ -57,6 +58,24 @@ class Workplane(cq.Workplane):
     ) -> Self:
         return cast(
             Self, m_screw.create_screw_hole(self, screw, body_depth, head_on_top)
+        )
+
+    def parabolic_channel(
+        self,
+        length=60.0,
+        width=40.0,
+        side_thickness=10.0,
+        top_thickness=10.0,
+    ) -> Self:
+        return cast(
+            Self,
+            parabolic.parabolic_channel(
+                self,
+                length,
+                width,
+                side_thickness,
+                top_thickness,
+            ),
         )
 
     def get_center(self) -> cq.Vector:

@@ -10,9 +10,10 @@ from dtools.workplane import Workplane
 
 class CalMaker:
 
-    pillar_base_radius = 25.0
-    pillar_top_radius = 15.0
+    pillar_base_radius = 12.5
+    pillar_top_radius = 8.0
     pillar_height = 100.0
+    pillar_top_center_offset = pillar_top_radius - pillar_base_radius
 
     pillar_base_center_offset = (0, -20)
     pillar_base_hole_depth = 0.4
@@ -24,6 +25,7 @@ class CalMaker:
     base_to_pillar_pins_height = 3.0
     base_to_pillar_pins_clearance = 0.2
     base_pillar_pin_to_center_distance = 14
+    top_pillar_pin_to_center_distance = 8
 
     base_to_pillar_screw = m_screw.MScrew.M3
 
@@ -42,11 +44,13 @@ class CalMaker:
         base_base = self.base_box.create_box_base()
         drawer = self.base_box.create_drawer()
         pillar = self.__create_pillar()
+        head = self.__create_head()
         ass.add(base_base, name="base")
+        base_top_vec = cq.Vector(0, 0, base_base.get_bbox().zmax)
         ass.add(
             base_top,
             name="base_top",
-            loc=cq.Location(cq.Vector(0, 0, base_base.get_bbox().zmax)),
+            loc=cq.Location(base_top_vec),
         )
         ass.add(
             drawer,
@@ -58,18 +62,39 @@ class CalMaker:
         pillar_xy_loc += cq.Vector(
             self.pillar_base_center_offset[0], self.pillar_base_center_offset[1], 0
         )
+        pillar_loc = cq.Vector(
+            pillar_xy_loc.x,
+            pillar_xy_loc.y,
+            +base_top_vec.z + base_top.get_bbox().zmax - self.pillar_base_hole_depth,
+        )
+
         ass.add(
             pillar,
             name="pillar",
-            loc=cq.Location(
-                cq.Vector(
-                    pillar_xy_loc.x,
-                    pillar_xy_loc.y,
-                    +base_base.get_bbox().zmax
-                    + base_top.get_bbox().zmax
-                    - self.pillar_base_hole_depth,
-                )
-            ),
+            loc=cq.Location(pillar_loc),
+        )
+
+        head_loc = cq.Vector(
+            pillar_loc.x,
+            pillar_loc.y + self.pillar_top_center_offset,
+            pillar_loc.z + pillar.get_bbox().zmax,
+        )
+        ass.add(
+            head,
+            name="head",
+            loc=cq.Location(head_loc),
+        )
+
+        cap_loc = cq.Vector(
+            head_loc.x,
+            head_loc.y,
+            head_loc.z + head.get_bbox().zmax,
+        )
+        cap = self.__create_head_cap()
+        ass.add(
+            cap,
+            name="cap",
+            loc=cq.Location(cap_loc),
         )
         return ass
 
@@ -114,22 +139,25 @@ class CalMaker:
                 self.base_to_pillar_pins_count,
                 pillar_base_radius,
                 pillar_real_height,
+                self.base_pillar_pin_to_center_distance,
             )
         return all
 
     def __create_pillar(self) -> Workplane:
-        top_offset = self.pillar_base_radius - self.pillar_top_radius
+
+        # main pillar body
         pillar = (
             Workplane("XY")
             .circle(self.pillar_base_radius)
             .workplane(offset=self.pillar_height)
-            .polar_move_to(-0.5 * math.pi, top_offset)
+            .moveTo(0, self.pillar_top_center_offset)
             .circle(self.pillar_top_radius)
             .loft()
         )
 
         all = pillar
 
+        # Holes for base pins
         for i in range(self.base_to_pillar_pins_count):
             all -= self.__create_pin(
                 0,
@@ -138,13 +166,78 @@ class CalMaker:
                 self.base_to_pillar_pins_count,
                 self.base_to_pillar_pins_radius,
                 self.base_to_pillar_pins_height,
+                self.base_pillar_pin_to_center_distance,
             )
 
+        heatsert_depth = 20
+        # cut heatsert for the base screw
         all -= (
             Workplane("XY")
             .moveTo(pillar.get_center().x, pillar.get_center().y)
-            .heatsert(self.base_to_pillar_screw, depth=20)
+            .heatsert(self.base_to_pillar_screw, depth=heatsert_depth)
         )
+
+        # cut a heatsert for the head screw on top
+        top_circle_center = cq.Vector(
+            pillar.get_center().x, pillar.get_center().y + self.pillar_top_center_offset
+        )
+        all -= (
+            Workplane("XY")
+            .moveTo(top_circle_center.x, top_circle_center.y)
+            .heatsert(self.base_to_pillar_screw, depth=heatsert_depth)
+            .translate((0, 0, self.pillar_height - heatsert_depth))
+        )
+
+        # Add pins for the head attachment
+        for i in range(self.base_to_pillar_pins_count):
+            all += self.__create_pin(
+                self.pillar_height,
+                top_circle_center,
+                i,
+                self.base_to_pillar_pins_count,
+                self.base_to_pillar_pins_radius,
+                self.base_to_pillar_pins_height,
+                self.top_pillar_pin_to_center_distance,
+            )
+
+        return all
+
+    def __create_head(self) -> Workplane:
+        all = self.__create_head_base_shape()
+        all = all.intersect(
+            Workplane("XY").box(
+                2 * self.pillar_top_radius, 2 * self.pillar_top_radius, 35
+            )
+        )
+        return all
+
+    def __create_head_cap(self) -> Workplane:
+        all = self.__create_head_base_shape()
+        all -= Workplane("XY").box(
+            2 * self.pillar_top_radius, 2 * self.pillar_top_radius, 35
+        )
+
+        return all
+
+    def __create_head_base_shape(self) -> Workplane:
+
+        all = (
+            Workplane("XZ")
+            .lineTo(self.pillar_top_radius, 0)
+            .bezier(
+                [
+                    (self.pillar_top_radius, 0),
+                    (self.pillar_top_radius, 3),
+                    (self.pillar_top_radius * 0.8, 18),
+                    (self.pillar_top_radius * 0.2, 22),
+                    (4, 30),
+                    (0, 30.2),
+                ]
+            )
+            .close()
+            .revolve(axisStart=cq.Vector(0, 0, 0), axisEnd=cq.Vector(0, 1, 0))
+        )
+
         return all
 
     def __create_pin(
@@ -155,6 +248,7 @@ class CalMaker:
         count: int,
         radius: float,
         height: float,
+        distance_to_center: float,
     ) -> Workplane:
         pin = (
             Workplane("XY")
@@ -162,7 +256,7 @@ class CalMaker:
             .moveTo(center.x, center.y)
             .polar_move_to(
                 idx / count * 2 * math.pi,
-                self.base_pillar_pin_to_center_distance,
+                distance_to_center,
                 relative=True,
             )
             .circle(radius)
