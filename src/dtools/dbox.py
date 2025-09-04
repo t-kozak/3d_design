@@ -1,12 +1,13 @@
 from dataclasses import dataclass
-import enum
+
 import logging
 import time
-from typing import Literal
+
 
 from .texture.tex_details import TextureDetails
 from .texture import HoneycombTexture
-from .workplane import MScrew, Workplane
+from .m_screw import MScrew
+from .workplane import Workplane
 from ocp_vscode import show
 import cadquery as cq
 

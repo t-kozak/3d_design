@@ -41,7 +41,6 @@ lint.select = [
 
 [tool.uv.sources]
 
-
 [tool.pytest.ini_options]
 log_level = "DEBUG"
 pythonpath = ["src"]

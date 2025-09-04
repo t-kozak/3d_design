@@ -5,9 +5,10 @@ from typing import Literal, Self, cast, TYPE_CHECKING
 
 import cadquery as cq
 
-from .m_screw import MScrew
+
 from . import teardrop
 from . import heatserts
+from . import m_screw
 
 if TYPE_CHECKING:
     from .texture import TextureDetails
@@ -21,7 +22,7 @@ class Workplane(cq.Workplane):
 
     def heatsert(
         self,
-        size: MScrew = MScrew.M4,
+        size: m_screw.MScrew = m_screw.MScrew.M4,
         depth: float | None = None,
     ) -> Self:
         return cast(Self, heatserts.heatsert(self, size, depth))
@@ -39,12 +40,24 @@ class Workplane(cq.Workplane):
 
         if relative:
             # Get current position and add the calculated offset
-            current_pos = self.plane.origin
+            val = self.val()
+            assert isinstance(val, cq.Vector)
+            current_pos = val
             x += current_pos.x
             y += current_pos.y
 
         # Delegate to base class moveTo method
         return cast(Self, self.moveTo(x, y))
+
+    def screw_core_hole(self, screw: m_screw.MScrew, depth: float) -> Self:
+        return cast(Self, m_screw.create_screw_core_hole(self, screw, depth))
+
+    def screw_hole(
+        self, screw: m_screw.MScrew, body_depth: float, head_on_top: bool = True
+    ) -> Self:
+        return cast(
+            Self, m_screw.create_screw_hole(self, screw, body_depth, head_on_top)
+        )
 
     def get_center(self) -> cq.Vector:
         val = self.val()
@@ -52,5 +65,12 @@ class Workplane(cq.Workplane):
             return val
         elif isinstance(val, cq.Shape):
             return val.BoundingBox().center
+        else:
+            raise ValueError(f"Invalid type: {type(val)}")
+
+    def get_bbox(self) -> cq.BoundBox:
+        val = self.val()
+        if isinstance(val, cq.Shape):
+            return val.BoundingBox()
         else:
             raise ValueError(f"Invalid type: {type(val)}")

@@ -1,57 +1,179 @@
-import os
-from pathlib import Path
-import sys
-from typing import cast
+from ctypes import cast
+import math
 import cadquery as cq
+from ocp_vscode import show
 
-from dtools import Workplane
+from dtools import m_screw
 from dtools.dbox import DrawerBoxParams, ParametricDrawerBox
+from dtools.workplane import Workplane
 
 
 class CalMaker:
 
-    pillar_base_center_offset = (0, 0)
-    pillar_base_hole_depth = 1.0
-    pillar_base_hole_radius = 10.0
+    pillar_base_radius = 25.0
+    pillar_top_radius = 15.0
+    pillar_height = 100.0
+
+    pillar_base_center_offset = (0, -20)
+    pillar_base_hole_depth = 0.4
+    pillar_base_hole_radius = pillar_base_radius + 0.2
+
+    # 4 makes it symmetric, allowing one to rotate the pillar in any direction
+    base_to_pillar_pins_count = 4
+    base_to_pillar_pins_radius = 2
+    base_to_pillar_pins_height = 3.0
+    base_to_pillar_pins_clearance = 0.2
+    base_pillar_pin_to_center_distance = 14
+
+    base_to_pillar_screw = m_screw.MScrew.M3
 
     def __init__(self):
-        self.base_box = ParametricDrawerBox(
-            DrawerBoxParams(
-                content_length=150.0,
-                content_width=100.0,
-                content_height=20.0,
-            )
+        self.base_params = DrawerBoxParams(
+            content_length=150.0,
+            content_width=100.0,
+            content_height=20.0,
         )
+        self.base_box = ParametricDrawerBox(self.base_params)
 
     def create_assembly(self) -> cq.Assembly:
-        return cq.Assembly()
+        ass = cq.Assembly(name="Calendar")
+
+        base_top = self.__create_base_top()
+        base_base = self.base_box.create_box_base()
+        drawer = self.base_box.create_drawer()
+        pillar = self.__create_pillar()
+        ass.add(base_base, name="base")
+        ass.add(
+            base_top,
+            name="base_top",
+            loc=cq.Location(cq.Vector(0, 0, base_base.get_bbox().zmax)),
+        )
+        ass.add(
+            drawer,
+            name="drawer",
+            loc=cq.Location(cq.Vector(0, 0, self.base_params.box_base_thickness)),
+        )
+
+        pillar_xy_loc = base_top.get_center()
+        pillar_xy_loc += cq.Vector(
+            self.pillar_base_center_offset[0], self.pillar_base_center_offset[1], 0
+        )
+        ass.add(
+            pillar,
+            name="pillar",
+            loc=cq.Location(
+                cq.Vector(
+                    pillar_xy_loc.x,
+                    pillar_xy_loc.y,
+                    +base_base.get_bbox().zmax
+                    + base_top.get_bbox().zmax
+                    - self.pillar_base_hole_depth,
+                )
+            ),
+        )
+        return ass
 
     def export_all_for_printing(self):
-        self.base_box.create_box_base(for_printing=True).export("base.stl")
-        self.__create_base_top(for_printing=True).export("top.stl")
-        self.base_box.create_drawer(for_printing=True).export("drawer.stl")
+        self.create_assembly().export("calendar.stl")
 
-    def __create_base_top(self, for_printing: bool = False) -> cq.Workplane:
+    def __create_base_top(self, for_printing: bool = False) -> Workplane:
         top_base = self.base_box.create_box_top()
-
+        base_bbox = top_base.get_bbox()
         center = top_base.get_center()
-
-        pillar_hole_plane = (
-            top_base.faces(">Z")
-            .workplane()
-            .workplane(offset=-self.pillar_base_hole_depth)
+        center = center + cq.Vector(
+            self.pillar_base_center_offset[0], self.pillar_base_center_offset[1], 0
         )
+        pillar_hole_plane_z_offset = base_bbox.zmax - self.pillar_base_hole_depth
+        # Create pillar hole at the center of the top face
         pillar_hole = (
-            pillar_hole_plane.moveTo(center.x, center.y)
+            Workplane("XY")
+            .workplane(offset=pillar_hole_plane_z_offset)
+            .moveTo(center.x, center.y)
             .circle(self.pillar_base_hole_radius)
-            .extrude(self.pillar_base_hole_depth * 2)
+            .extrude(100)
+        )
+        all = top_base - pillar_hole
+        pillar_real_height = (
+            self.base_to_pillar_pins_height - self.base_to_pillar_pins_clearance
+        )
+        pillar_base_radius = (
+            self.base_to_pillar_pins_radius - self.base_to_pillar_pins_clearance
         )
 
-        print(center)
-        all = top_base - pillar_hole_plane
+        screw_hole = (
+            Workplane("XY")
+            .moveTo(center.x, center.y)
+            .screw_hole(self.base_to_pillar_screw, 8, head_on_top=False)
+        )
+        all -= screw_hole
+        for i in range(self.base_to_pillar_pins_count):
+            all += self.__create_pin(
+                pillar_hole_plane_z_offset,
+                center,
+                i,
+                self.base_to_pillar_pins_count,
+                pillar_base_radius,
+                pillar_real_height,
+            )
         return all
+
+    def __create_pillar(self) -> Workplane:
+        top_offset = self.pillar_base_radius - self.pillar_top_radius
+        pillar = (
+            Workplane("XY")
+            .circle(self.pillar_base_radius)
+            .workplane(offset=self.pillar_height)
+            .polar_move_to(-0.5 * math.pi, top_offset)
+            .circle(self.pillar_top_radius)
+            .loft()
+        )
+
+        all = pillar
+
+        for i in range(self.base_to_pillar_pins_count):
+            all -= self.__create_pin(
+                0,
+                pillar.get_center(),
+                i,
+                self.base_to_pillar_pins_count,
+                self.base_to_pillar_pins_radius,
+                self.base_to_pillar_pins_height,
+            )
+
+        all -= (
+            Workplane("XY")
+            .moveTo(pillar.get_center().x, pillar.get_center().y)
+            .heatsert(self.base_to_pillar_screw, depth=20)
+        )
+        return all
+
+    def __create_pin(
+        self,
+        z_offset: float,
+        center: cq.Vector,
+        idx: int,
+        count: int,
+        radius: float,
+        height: float,
+    ) -> Workplane:
+        pin = (
+            Workplane("XY")
+            .workplane(offset=z_offset)
+            .moveTo(center.x, center.y)
+            .polar_move_to(
+                idx / count * 2 * math.pi,
+                self.base_pillar_pin_to_center_distance,
+                relative=True,
+            )
+            .circle(radius)
+            .extrude(height)
+            .faces(">Z")
+            .fillet(radius)
+        )
+        return pin
 
 
 if __name__ == "__main__":
+
     cal_maker = CalMaker()
-    cal_maker.export_all_for_printing()
+    show(cal_maker.create_assembly())
