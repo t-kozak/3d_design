@@ -1,5 +1,8 @@
 from dataclasses import dataclass
+import hashlib
+import logging
 import math
+import os
 import random
 
 import cadquery as cq
@@ -10,6 +13,8 @@ from ..merge import merge_shapes_in_batches_threaded
 from ..workplane import Workplane
 from .tex_details import TextureDetails
 
+_log = logging.getLogger(__name__)
+
 try:
     from tqdm import tqdm  # pyright: ignore[reportAssignmentType]
 except ImportError:
@@ -17,7 +22,7 @@ except ImportError:
     def tqdm(iterable, desc=None, total=None, disable=False):
         if disable:
             return iterable
-        print(f"{desc}: Starting...")
+        _log.debug(f"{desc}: Starting...")
         return iterable
 
 
@@ -103,8 +108,15 @@ def add_hex_texture_to_faces(
         )
 
         # Only keep hexagons that intersect with the face area
+        _log.debug(f"Clipping hex texture with face solid...")
         clipped_texture = hex_texture.intersect(face_solid)
-        result = result.union(clipped_texture)
+        _log.debug(f"Clipping hex texture with face solid... done")
+        cq.exporters.export(
+            exportType="BREP", w=clipped_texture, fname="clipped_texture.brep"
+        )
+        _log.debug(f"Union hex texture with result...")
+        result = result.union(hex_texture)
+        _log.debug(f"Union hex texture with result... done")
 
     return result
 
@@ -343,7 +355,7 @@ def _calculate_hex_grid(
     )  # Reduced margin since we check intersections
     rows = int(math.ceil(face_height / y_spacing)) + 1
 
-    print(
+    _log.debug(
         f"Hex texture grid: {cols} columns × {rows} rows = {cols * rows} potential positions"
     )
 
@@ -410,7 +422,7 @@ def _create_height_groups(
             ):
                 hex_count += 1
 
-    print(f"Will generate {hex_count} hexagons")
+    _log.debug(f"Will generate {hex_count} hexagons")
 
     # Start timing hexagon generation
     generation_timer = Stopwatch()
@@ -454,10 +466,53 @@ def _create_height_groups(
                     height_groups[discretized_height] = []
                 height_groups[discretized_height].append((world_pos, local_x, local_y))
 
-    # Print hexagon generation timing
-    print(f"Hexagon generation completed in {generation_timer.elapsed:.2f} seconds")
+    # Log hexagon generation timing
+    _log.debug(
+        f"Hexagon generation completed in {generation_timer.elapsed:.2f} seconds"
+    )
 
     return height_groups
+
+
+def _generate_cache_hash(
+    height_groups: dict[float, list[tuple[cq.Vector, float, float]]],
+    face: cq.Face,
+    details: HoneycombTexture,
+    face_center: cq.Vector,
+    u_vec: cq.Vector,
+    v_vec: cq.Vector,
+    show_progress: bool,
+) -> str:
+    """
+    Generate a hash from the function arguments for caching purposes.
+
+    Returns:
+        A hexadecimal hash string representing the input arguments
+    """
+    # Create a string representation of the arguments
+    # For complex objects, we'll use their string representation or key attributes
+    args_str = ""
+
+    # Hash height_groups by converting to a deterministic string
+    height_groups_str = str(sorted(height_groups.items()))
+    args_str += f"height_groups:{height_groups_str};"
+
+    # Hash face by its key geometric properties
+    face_str = f"face_normal:{face.normalAt()};face_center:{face.Center()};face_area:{face.Area()}"  # pyright: ignore[reportCallIssue]
+    args_str += f"face:{face_str};"
+
+    # Hash details object by its attributes
+    details_str = f"hex_side_len:{details.hex_side_len};hex_height_min:{details.hex_height_min};hex_height_max:{details.hex_height_max};height_steps:{details.height_steps};rotation_degrees:{details.rotation_degrees}"
+    args_str += f"details:{details_str};"
+
+    # Hash vectors
+    args_str += f"face_center:{face_center};u_vec:{u_vec};v_vec:{v_vec};"
+
+    # Hash boolean
+    args_str += f"show_progress:{show_progress}"
+
+    # Generate SHA-256 hash
+    return "hex-" + hashlib.sha256(args_str.encode()).hexdigest()
 
 
 def _generate_surface_from_height_groups(
@@ -475,6 +530,29 @@ def _generate_surface_from_height_groups(
     Returns:
         Workplane containing all the generated hexagons, or None if no hexagons were created
     """
+    # Generate cache hash from input arguments
+    cache_hash = _generate_cache_hash(
+        height_groups, face, details, face_center, u_vec, v_vec, show_progress
+    )
+
+    # Check if cache file exists
+    cache_dir = "./caches"
+    cache_file = os.path.join(cache_dir, f"{cache_hash}.brep")
+
+    if os.path.exists(cache_file):
+
+        _log.debug(f"Loading cached result from {cache_file}...")
+        try:
+            # Load cached Workplane using importBrep
+            cached_result = cq.importers.importBrep(cache_file)
+            _log.debug(f"Loaded cached result from {cache_file}... done")
+            # Convert to our custom Workplane type by creating a new Workplane with the imported object
+            return Workplane("XY").newObject([cached_result.val()])
+        except Exception as e:
+
+            _log.warning(f"Failed to load cache file {cache_file}: {e}")
+            # Continue with normal computation if cache loading fails
+
     all_hex_shapes = []
 
     for batch_height, positions in height_groups.items():
@@ -506,14 +584,14 @@ def _generate_surface_from_height_groups(
                 )
                 all_hex_shapes.append(hex_shape)
             except Exception as e:
-                print(f"Warning: Could not create hexagon at {local_x}, {local_y}: {e}")
+                _log.warning(f"Could not create hexagon at {local_x}, {local_y}: {e}")
                 continue
 
     # Merge all hex shapes using tree-based batching with multi-threading
-    if show_progress:
-        print(
-            f"Merging {len(all_hex_shapes)} hexagons using threaded tree-based batching..."
-        )
+
+    _log.debug(
+        f"Merging {len(all_hex_shapes)} hexagons using threaded tree-based batching..."
+    )
 
     # Start timing the merge operation
     merge_timer = Stopwatch()
@@ -522,10 +600,22 @@ def _generate_surface_from_height_groups(
         all_hex_shapes, show_progress=show_progress
     )
 
-    # Print merge timing
+    # Log merge timing
     merge_time = merge_timer.elapsed
-    if show_progress:
-        print(f"Merge operation completed in {merge_time:.2f} seconds")
+
+    _log.debug(f"Merge operation completed in {merge_time:.2f} seconds")
+
+    # Save result to cache
+    if result is not None:
+        try:
+            # Ensure cache directory exists
+            os.makedirs(cache_dir, exist_ok=True)
+
+            # Save result to cache file using BREP format
+            cq.exporters.export(exportType="BREP", w=result, fname=cache_file)
+            _log.debug(f"Cached result saved to {cache_file}")
+        except Exception as e:
+            _log.warning(f"Failed to save cache file {cache_file}: {e}")
 
     return result
 
@@ -538,7 +628,7 @@ def _generate_hex_texture_for_face(
     """
     Generate hexagonal texture positioned and oriented for a specific face.
     """
-
+    _log.debug(f"Generating hex texture for face...")
     # Get face center and normal
     face_center = face.Center()
     face_normal = face.normalAt()  # type: ignore
@@ -574,6 +664,7 @@ def _generate_hex_texture_for_face(
     )
 
     if not height_groups:
+        _log.debug(f"Generating hex texture for face... failed - no height groups.")
         return None
 
     # Generate the surface from height groups
@@ -582,6 +673,7 @@ def _generate_hex_texture_for_face(
     )
 
     if result is None:
+        _log.debug(f"Generating hex texture for face... failed.")
         return None
-
+    _log.debug(f"Generating hex texture for face... done.")
     return result, u_vec, v_vec
