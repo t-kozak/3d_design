@@ -25,8 +25,8 @@ class DrawerBoxParams:
 
     screw_type = MScrew.M2
     screw_head_height = 5.0
-    content_width: float
     content_length: float
+    content_width: float
     content_height: float
     top_texture: TextureDetails | None = None
 
@@ -35,7 +35,7 @@ class ParametricDrawerBox:
 
     def __init__(self, params: DrawerBoxParams) -> None:
         _log.debug(
-            f"Initializing ParametricDrawerBox with dimensions: {params.content_width}x{params.content_length}x{params.content_height}"
+            f"Initializing ParametricDrawerBox with dimensions: {params.content_length}x{params.content_width}x{params.content_height}"
         )
         _log.debug(f"Top texture: {params.top_texture}")
         self.__p = params
@@ -91,8 +91,8 @@ class ParametricDrawerBox:
         front -= (
             Workplane("XY")
             .box(
-                self.__box_width,
                 self.__box_length,
+                self.__box_width,
                 self.__base_height * 2,
                 centered=False,
             )
@@ -102,17 +102,17 @@ class ParametricDrawerBox:
         real_drawer_wall_thickness = (
             self.__p.drawer_wall_thickness - self.__p.drawer_clearance
         )
-        d_width = self.__p.content_width + 2 * (real_drawer_wall_thickness)
         d_length = self.__p.content_length + 2 * (real_drawer_wall_thickness)
+        d_width = self.__p.content_width + 2 * (real_drawer_wall_thickness)
         d_height = self.__p.content_height + (real_drawer_wall_thickness)
-        _log.debug(f"Drawer dimensions: {d_width}x{d_length}x{d_height}")
+        _log.debug(f"Drawer dimensions: {d_length}x{d_width}x{d_height}")
 
-        drawer = Workplane("XY").box(d_width, d_length, d_height, centered=False)
+        drawer = Workplane("XY").box(d_length, d_width, d_height, centered=False)
         content_hole = (
             Workplane("XY")
             .box(
-                self.__p.content_width,
                 self.__p.content_length,
+                self.__p.content_width,
                 self.__p.content_height,
                 centered=False,
             )
@@ -144,9 +144,11 @@ class ParametricDrawerBox:
         start_time = time.time()
         _log.debug("Starting create_box_base")
 
-        drawer_hole_width = self.__p.content_width + 2 * self.__p.drawer_wall_thickness
         drawer_hole_length = (
-            self.__p.content_length
+            self.__p.content_length + 2 * self.__p.drawer_wall_thickness
+        )
+        drawer_hole_width = (
+            self.__p.content_width
             + 2 * self.__p.drawer_wall_thickness
             + self.__p.box_wall_thickness
         )
@@ -156,7 +158,7 @@ class ParametricDrawerBox:
             + self.__p.drawer_clearance
         )
         _log.debug(
-            f"Drawer hole dimensions: {drawer_hole_width}x{drawer_hole_length}x{drawer_hole_height}"
+            f"Drawer hole dimensions: {drawer_hole_length}x{drawer_hole_width}x{drawer_hole_height}"
         )
 
         # Create base body
@@ -171,7 +173,7 @@ class ParametricDrawerBox:
         box -= (
             Workplane("XY")
             .box(
-                self.__box_width,
+                self.__box_length,
                 self.__p.box_wall_thickness,
                 self.__base_height,
                 centered=False,
@@ -182,8 +184,8 @@ class ParametricDrawerBox:
         drawer_hole = (
             Workplane("XY")
             .box(
-                drawer_hole_width + 2 * self.__p.drawer_clearance,
-                drawer_hole_length + self.__p.drawer_clearance,
+                drawer_hole_length + 2 * self.__p.drawer_clearance,
+                drawer_hole_width + self.__p.drawer_clearance,
                 drawer_hole_height + self.__p.drawer_clearance,
                 centered=False,
             )
@@ -214,7 +216,7 @@ class ParametricDrawerBox:
         _log.debug("Box top body created, cutting front")
         # Cut off space for the drawer's front
         all -= Workplane("XY").box(
-            self.__box_width,
+            self.__box_length,
             self.__p.box_wall_thickness,
             self.__p.box_top_thickness * 2,
             centered=False,
@@ -232,8 +234,8 @@ class ParametricDrawerBox:
     def _get_box_screw_hole_centers(self) -> list[tuple[float, float]]:
         low_x = self.__p.box_wall_thickness / 2
         low_y = self.__p.box_wall_thickness * 1.5
-        high_x = self.__box_width - (self.__p.box_wall_thickness / 2)
-        high_y = self.__box_length - (self.__p.box_wall_thickness / 2)
+        high_x = self.__box_length - (self.__p.box_wall_thickness / 2)
+        high_y = self.__box_width - (self.__p.box_wall_thickness / 2)
         return [
             (low_x, low_y),
             (low_x, high_y),
@@ -260,7 +262,7 @@ class ParametricDrawerBox:
         _log.debug("Creating box body...")
         box = (
             Workplane("XY")
-            .box(self.__box_width, self.__box_length, height, centered=False)
+            .box(self.__box_length, self.__box_width, height, centered=False)
             .edges("|Z")
             .fillet(self.__p.box_radius)
         )
@@ -275,18 +277,18 @@ class ParametricDrawerBox:
         return box
 
     @property
-    def __box_width(self) -> float:
+    def __box_length(self) -> float:
         return (
-            self.__p.content_width
+            self.__p.content_length
             + 2 * self.__p.box_wall_thickness
             + 2 * self.__p.drawer_wall_thickness
             + 2 * self.__p.drawer_clearance
         )
 
     @property
-    def __box_length(self) -> float:
+    def __box_width(self) -> float:
         return (
-            self.__p.content_length
+            self.__p.content_width
             + 2 * self.__p.box_wall_thickness
             + 2 * self.__p.drawer_wall_thickness
             + 2 * self.__p.drawer_clearance
@@ -321,8 +323,8 @@ if __name__ == "__main__":
         height_steps=3,
     )
     params = DrawerBoxParams(
-        content_width=150.0,
-        content_length=100.0,
+        content_length=150.0,
+        content_width=100.0,
         content_height=20.0,
         # top_texture=texture,
     )
