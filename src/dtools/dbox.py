@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 import logging
+from pathlib import Path
 import time
 
 
@@ -226,9 +227,7 @@ class ParametricDrawerBox:
 
         # Create top body
         all = self.__create_box_body(self.__p.box_top_thickness, True)
-        _log.debug(
-            f"Box top body created, cutting front. allow clean? {all.allow_clean}"
-        )
+        _log.debug(f"Box top body created, cutting front.")
         # Cut off space for the drawer's front
         all -= Workplane("XY").box(
             self.__box_length,
@@ -237,10 +236,10 @@ class ParametricDrawerBox:
             centered=False,
         )
 
-        _log.debug(f"Adding heatserts to box top. allow clean? {all.allow_clean}")
+        _log.debug(f"Adding heatserts to box top.")
         for center in self._get_box_screw_hole_centers():
             heatsert = Workplane("XY").moveTo(*center).heatsert(self.__p.screw_type)
-            _log.debug(f"Adding heatsert to box top. allow clean? {all.allow_clean}")
+            _log.debug(f"Adding heatsert to box top.")
             all -= heatsert
 
         elapsed_time = time.time() - start_time
@@ -273,10 +272,8 @@ class ParametricDrawerBox:
                 self.__p.top_texture,
                 show_progress=True,
             )
-            _log.debug(
-                f"Applying texture to top face... done; allow clean? {box.allow_clean}"
-            )
-        _log.debug(f"Creating box body... done; allow clean? {box.allow_clean}")
+            _log.debug(f"Applying texture to top face... done;")
+        _log.debug(f"Creating box body... done; allow clean?")
         return box
 
     @property
@@ -318,7 +315,7 @@ if __name__ == "__main__":
     _log.info("Starting ParametricDrawerBox example")
 
     texture = HoneycombTexture(
-        hex_side_len=35,
+        hex_side_len=5,
         hex_height_min=1,
         hex_height_max=3,
         random_seed=42,
@@ -326,9 +323,9 @@ if __name__ == "__main__":
         height_steps=3,
     )
     params = DrawerBoxParams(
-        content_length=150.0,
-        content_width=100.0,
-        content_height=20.0,
+        content_length=15.0,
+        content_width=15.0,
+        content_height=10.0,
         top_texture=texture,
     )
     dbox = ParametricDrawerBox(params)
@@ -336,12 +333,12 @@ if __name__ == "__main__":
 
     _log.info("ParametricDrawerBox example completed")
 
-    # top = dbox.create_box_top()
-    # base = dbox.create_box_base()
+    top = dbox.create_box_top()
+    base = dbox.create_box_base()
+    drawer = dbox.create_drawer()
 
-    # top = top.intersect(Workplane("XY").box(20, 20, 100).translate((10, 20, 0)))
-    # top.export("top_sampler.stl")
-
-    # base = base.intersect(Workplane("XY").box(40, 40, 100))
-    # base.export("base_sampler.stl")
-    # show(base)
+    outp = Path("build/dbox")
+    outp.mkdir(parents=True, exist_ok=True)
+    top.export(outp / "top.stl")
+    base.export(outp / "base.stl")
+    drawer.export(outp / "drawer.stl")

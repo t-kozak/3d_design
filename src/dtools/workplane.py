@@ -31,9 +31,10 @@ if TYPE_CHECKING:
 
 class Workplane(cq.Workplane):
 
+    auto_clean: bool = True
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.allow_clean = True
 
     def teardrop(
         self, radius: float = 1, rotate: float = 0, clip: float | None = None
@@ -44,8 +45,9 @@ class Workplane(cq.Workplane):
         self,
         size: m_screw.MScrew = m_screw.MScrew.M4,
         depth: float | None = None,
+        depth_clearance: float = 0.2,
     ) -> Self:
-        return cast(Self, heatserts.heatsert(self, size, depth))
+        return cast(Self, heatserts.heatsert(self, size, depth, depth_clearance))
 
     def texture(self, details: "TextureDetails", show_progress: bool = False) -> Self:
         # Import here to avoid circular import
@@ -140,8 +142,7 @@ class Workplane(cq.Workplane):
         clean: bool = True,
         tol: Optional[float] = None,
     ) -> Self:
-        self.__merge_allow_clean(toCut)
-        clean = clean and self.allow_clean
+        clean = clean and self.auto_clean
         _log.debug(f"cutting. clean? {clean}")
         return cast(Self, super().cut(toCut, clean, tol))
 
@@ -151,8 +152,8 @@ class Workplane(cq.Workplane):
         clean: bool = True,
         tol: Optional[float] = None,
     ) -> Self:
-        self.__merge_allow_clean(toIntersect)
-        clean = clean and self.allow_clean
+
+        clean = clean and self.auto_clean
         return super().intersect(toIntersect, clean, tol)
 
     def union(
@@ -162,19 +163,9 @@ class Workplane(cq.Workplane):
         glue: bool = False,
         tol: Optional[float] = None,
     ) -> Self:
-        self.__merge_allow_clean(toUnion)
-        clean = clean and self.allow_clean
-        return super().union(toUnion, clean, glue, tol)
+        clean = clean and self.auto_clean
 
-    def __merge_allow_clean(self, other) -> None:
-        if not isinstance(other, Workplane):
-            return
-        _log.debug(
-            f"merging allow clean. self.allow_clean: {self.allow_clean}, other.allow_clean: {other.allow_clean}"
-        )
-        self.allow_clean &= other.allow_clean
-        self.allow_clean = False
-        _log.debug(f"merged allow clean. self.allow_clean: {self.allow_clean}")
+        return super().union(toUnion, clean, glue, tol)
 
     def export(
         self,

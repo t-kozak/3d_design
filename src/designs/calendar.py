@@ -9,6 +9,8 @@ from dtools.dbox import DrawerBoxParams, ParametricDrawerBox
 from dtools.texture.hex import HoneycombTexture
 from dtools.workplane import Workplane
 
+Workplane.auto_clean = False
+
 
 class CalMaker:
 
@@ -197,6 +199,7 @@ class CalMaker:
                 .moveTo(screw_loc.x, screw_loc.y)
                 .heatsert(
                     self.base_to_pillar_screw,
+                    depth=8,
                 )
             )
 
