@@ -16,22 +16,22 @@ _log = logging.getLogger(__name__)
 
 @dataclass
 class DrawerBoxParams:
-    drawer_wall_thickness = 2.0
-    drawer_clearance = 0.2
+    drawer_wall_thickness: float = 2.0
+    drawer_clearance: float = 0.2
 
-    box_wall_thickness = 10.0
-    box_base_thickness = 4.0
-    box_top_thickness = 5.5
-    box_radius = 5.0
+    box_wall_thickness: float = 10.0
+    box_base_thickness: float = 4.0
+    box_top_thickness: float = 5.5
+    box_radius: float = 5.0
 
     screw_type = MScrew.M2
-    screw_core_length = 8.0
-    screw_head_height = 5.0
-    screw_heatsert_depth = 4.4
+    screw_core_length: float = 8.0
+    screw_head_height: float = 5.0
+    screw_heatsert_depth: float = 4.4
 
-    content_length: float
-    content_width: float
-    content_height: float
+    content_length: float = 10.0
+    content_width: float = 10.0
+    content_height: float = 10.0
     top_texture: TextureDetails | None = None
 
 

@@ -12,12 +12,16 @@ from dtools.workplane import Workplane
 class CalMaker:
 
     base_box_params = DrawerBoxParams(
-        content_length=150.0,
-        content_width=100.0,
-        content_height=20.0,
+        content_length=160.0,
+        content_width=110.0,
+        content_height=30.0,
+        box_top_thickness=7.0,
     )
 
     base_to_pillar_screw = m_screw.MScrew.M3
+    base_to_pillar_screw_core_length = 10.0
+    base_to_pillar_screw_head_height = 3.0
+    base_to_pillar_screw_head_height = 3.0
 
     pillar_base_width = 50.0
     pillar_base_length = 80.0
@@ -96,7 +100,13 @@ class CalMaker:
         output = Path("build") / "cal"
         output.mkdir(parents=True, exist_ok=True)
         self.__create_head().export(str(output / "head.stl"))
-        # self.__create_pillar().export("pillar.stl")
+        pillar = self.__create_pillar()
+        pillar_head_sample = pillar - Workplane("XY").box(
+            1000,
+            1000,
+            180,
+        )
+        pillar_head_sample.export(str(output / "pillar_head_sample.stl"))
         # self.base_box.create_box_base().export("base_base.stl")
         # self.base_box.create_box_top().export("base_top.stl")
         # self.base_box.create_drawer().export("drawer.stl")
@@ -116,8 +126,21 @@ class CalMaker:
         pillar_center = pillar_hole.get_center()
         center_diff = center - pillar_center
         pillar_hole = pillar_hole.translate((center_diff.x, center_diff.y, 0))
-
+        pil_hole_bbox = pillar_hole.get_bbox()
         all = top_base - pillar_hole
+
+        for screw_loc in self.__get_pillar_screw_location(pil_hole_bbox):
+            all -= (
+                Workplane("XY")
+                .moveTo(screw_loc.x, screw_loc.y)
+                .screw_hole(
+                    self.base_to_pillar_screw,
+                    core_length=self.base_to_pillar_screw_core_length,
+                    head_height=self.base_to_pillar_screw_head_height,
+                    head_on_top=False,
+                )
+                # .translate((0, 0, -top_base.get_bbox().zlen))
+            )
 
         return all
 
@@ -131,6 +154,16 @@ class CalMaker:
             .rect(self.pillar_top_side_len, self.pillar_top_side_len)
             .loft()
         )
+
+        for screw_loc in self.__get_pillar_screw_location(base_b_box):
+            base -= (
+                Workplane("XY")
+                .moveTo(screw_loc.x, screw_loc.y)
+                .heatsert(
+                    self.base_to_pillar_screw,
+                )
+            )
+
         all = base
         head = (
             Workplane("XY")
@@ -259,13 +292,26 @@ class CalMaker:
 
         connector_magnet_hole = (
             Workplane("XY")
-            .circle(self.head_clip_magnet_radius)
-            .extrude(self.head_clip_magnet_depth)
-            .translate((0, 0, connector.get_bbox().zmax - self.head_clip_magnet_depth))
+            .teardrop(self.head_pillar_connector_magnet_radius)
+            .extrude(self.head_pillar_connector_magnet_depth)
+            .translate(
+                (
+                    0,
+                    0,
+                    connector.get_bbox().zmax - self.head_pillar_connector_magnet_depth,
+                )
+            )
         )
 
         all = front + connector - connector_magnet_hole
         return all
+
+    def __get_pillar_screw_location(self, bbox: cq.BoundBox) -> list[cq.Vector]:
+        return [
+            cq.Vector(bbox.xmin + 9, bbox.ymin + 13),
+            cq.Vector(bbox.xmax - 9, bbox.ymin + 13),
+            cq.Vector(bbox.center.x, bbox.ymax - 7),
+        ]
 
     def __create_pillar_base_shape(
         self, w: Workplane, with_clearance: bool = False
@@ -317,5 +363,6 @@ class CalMaker:
 if __name__ == "__main__":
 
     cal_maker = CalMaker()
+
     cal_maker.export_all_for_printing()
     show(cal_maker.create_assembly())
