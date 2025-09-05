@@ -1,5 +1,6 @@
 from ctypes import cast
 import math
+from pathlib import Path
 import cadquery as cq
 from ocp_vscode import show
 
@@ -92,7 +93,13 @@ class CalMaker:
         return ass
 
     def export_all_for_printing(self):
-        self.create_assembly().export("calendar.stl")
+        output = Path("build") / "cal"
+        output.mkdir(parents=True, exist_ok=True)
+        self.__create_head().export(str(output / "head.stl"))
+        # self.__create_pillar().export("pillar.stl")
+        # self.base_box.create_box_base().export("base_base.stl")
+        # self.base_box.create_box_top().export("base_top.stl")
+        # self.base_box.create_drawer().export("drawer.stl")
 
     def __create_base_top(self, for_printing: bool = False) -> Workplane:
         top_base = self.base_box.create_box_top()
@@ -310,4 +317,5 @@ class CalMaker:
 if __name__ == "__main__":
 
     cal_maker = CalMaker()
+    cal_maker.export_all_for_printing()
     show(cal_maker.create_assembly())

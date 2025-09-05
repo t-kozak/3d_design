@@ -27,7 +27,7 @@ class DrawerBoxParams:
     screw_type = MScrew.M2
     screw_core_length = 8.0
     screw_head_height = 5.0
-    screw_heatsert_depth = 4.0
+    screw_heatsert_depth = 4.4
 
     content_length: float
     content_width: float
