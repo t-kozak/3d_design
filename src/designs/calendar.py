@@ -10,32 +10,38 @@ from dtools.workplane import Workplane
 
 class CalMaker:
 
-    pillar_base_radius = 12.5
-    pillar_top_radius = 8.0
-    pillar_height = 100.0
-    pillar_top_center_offset = pillar_top_radius - pillar_base_radius
-
-    pillar_base_center_offset = (0, -20)
-    pillar_base_hole_depth = 0.4
-    pillar_base_hole_radius = pillar_base_radius + 0.2
-
-    # 4 makes it symmetric, allowing one to rotate the pillar in any direction
-    base_to_pillar_pins_count = 4
-    base_to_pillar_pins_radius = 2
-    base_to_pillar_pins_height = 3.0
-    base_to_pillar_pins_clearance = 0.2
-    base_pillar_pin_to_center_distance = 14
-    top_pillar_pin_to_center_distance = 8
+    base_box_params = DrawerBoxParams(
+        content_length=150.0,
+        content_width=100.0,
+        content_height=20.0,
+    )
 
     base_to_pillar_screw = m_screw.MScrew.M3
 
+    pillar_base_width = 50.0
+    pillar_base_length = 80.0
+    pillar_base_side_thickness = 10.0
+    pillar_base_top_thickness = 12.0
+    pillar_base_hole_depth = 0.4
+    pillar_base_clearance = 0.2
+
+    pillar_height = 100.0
+    pillar_top_side_len = 20.0
+
+    head_pillar_connector_side = 8.5
+    head_pillar_connector_depth = 15.0
+    head_pillar_connector_magnet_radius = 5.0 / 2
+    head_pillar_connector_magnet_depth = 1.8
+    head_pillar_connector_clearance = 0.2
+
+    head_front_side_len = 20.0
+    head_front_thickness = 12.0
+
+    head_clip_magnet_radius = 3.92 / 2
+    head_clip_magnet_depth = 1.91
+
     def __init__(self):
-        self.base_params = DrawerBoxParams(
-            content_length=150.0,
-            content_width=100.0,
-            content_height=20.0,
-        )
-        self.base_box = ParametricDrawerBox(self.base_params)
+        self.base_box = ParametricDrawerBox(self.base_box_params)
 
     def create_assembly(self) -> cq.Assembly:
         ass = cq.Assembly(name="Calendar")
@@ -55,17 +61,14 @@ class CalMaker:
         ass.add(
             drawer,
             name="drawer",
-            loc=cq.Location(cq.Vector(0, 0, self.base_params.box_base_thickness)),
+            loc=cq.Location(cq.Vector(0, 0, self.base_box_params.box_base_thickness)),
         )
 
-        pillar_xy_loc = base_top.get_center()
-        pillar_xy_loc += cq.Vector(
-            self.pillar_base_center_offset[0], self.pillar_base_center_offset[1], 0
-        )
+        pillar_xy_loc = base_top.get_center() - pillar.get_center()
         pillar_loc = cq.Vector(
             pillar_xy_loc.x,
             pillar_xy_loc.y,
-            +base_top_vec.z + base_top.get_bbox().zmax - self.pillar_base_hole_depth,
+            base_top_vec.z + base_top.get_bbox().zmax - self.pillar_base_hole_depth,
         )
 
         ass.add(
@@ -74,28 +77,18 @@ class CalMaker:
             loc=cq.Location(pillar_loc),
         )
 
+        pillar_bbox = pillar.get_bbox()
         head_loc = cq.Vector(
-            pillar_loc.x,
-            pillar_loc.y + self.pillar_top_center_offset,
-            pillar_loc.z + pillar.get_bbox().zmax,
+            pillar_loc.x + pillar_bbox.xlen / 2,
+            pillar_loc.y + 14,
+            pillar_loc.z + pillar_bbox.zmax - 16.7,
         )
         ass.add(
-            head,
+            head.rotate_center("Y", 90).rotate_center("Z", 90),
             name="head",
             loc=cq.Location(head_loc),
         )
 
-        cap_loc = cq.Vector(
-            head_loc.x,
-            head_loc.y,
-            head_loc.z + head.get_bbox().zmax,
-        )
-        cap = self.__create_head_cap()
-        ass.add(
-            cap,
-            name="cap",
-            loc=cq.Location(cap_loc),
-        )
         return ass
 
     def export_all_for_printing(self):
@@ -104,141 +97,188 @@ class CalMaker:
     def __create_base_top(self, for_printing: bool = False) -> Workplane:
         top_base = self.base_box.create_box_top()
         base_bbox = top_base.get_bbox()
-        center = top_base.get_center()
-        center = center + cq.Vector(
-            self.pillar_base_center_offset[0], self.pillar_base_center_offset[1], 0
-        )
-        pillar_hole_plane_z_offset = base_bbox.zmax - self.pillar_base_hole_depth
-        # Create pillar hole at the center of the top face
-        pillar_hole = (
-            Workplane("XY")
-            .workplane(offset=pillar_hole_plane_z_offset)
-            .moveTo(center.x, center.y)
-            .circle(self.pillar_base_hole_radius)
-            .extrude(100)
-        )
-        all = top_base - pillar_hole
-        pillar_real_height = (
-            self.base_to_pillar_pins_height - self.base_to_pillar_pins_clearance
-        )
-        pillar_base_radius = (
-            self.base_to_pillar_pins_radius - self.base_to_pillar_pins_clearance
-        )
 
-        screw_hole = (
-            Workplane("XY")
-            .moveTo(center.x, center.y)
-            .screw_hole(self.base_to_pillar_screw, 8, head_on_top=False)
-        )
-        all -= screw_hole
-        for i in range(self.base_to_pillar_pins_count):
-            all += self.__create_pin(
-                pillar_hole_plane_z_offset,
-                center,
-                i,
-                self.base_to_pillar_pins_count,
-                pillar_base_radius,
-                pillar_real_height,
-                self.base_pillar_pin_to_center_distance,
-            )
+        center = top_base.get_center()
+        pillar_hole_plane_z_offset = base_bbox.zmax - self.pillar_base_hole_depth
+
+        # Create pillar hole at the center of the top face
+        pillar_hole = Workplane("XY").workplane(offset=pillar_hole_plane_z_offset)
+        pillar_hole = self.__create_pillar_base_shape(
+            pillar_hole, with_clearance=True
+        ).extrude(100)
+        pillar_center = pillar_hole.get_center()
+        center_diff = center - pillar_center
+        pillar_hole = pillar_hole.translate((center_diff.x, center_diff.y, 0))
+
+        all = top_base - pillar_hole
+
         return all
 
     def __create_pillar(self) -> Workplane:
 
-        # main pillar body
-        pillar = (
-            Workplane("XY")
-            .circle(self.pillar_base_radius)
-            .workplane(offset=self.pillar_height)
-            .moveTo(0, self.pillar_top_center_offset)
-            .circle(self.pillar_top_radius)
+        base = self.__create_pillar_base_shape(Workplane("XY"))
+        base_b_box = base.get_bbox()
+        base = (
+            base.workplane(offset=self.pillar_height)
+            .moveTo(base_b_box.center.x, base_b_box.center.y)
+            .rect(self.pillar_top_side_len, self.pillar_top_side_len)
             .loft()
         )
-
-        all = pillar
-
-        # Holes for base pins
-        for i in range(self.base_to_pillar_pins_count):
-            all -= self.__create_pin(
-                0,
-                pillar.get_center(),
-                i,
-                self.base_to_pillar_pins_count,
-                self.base_to_pillar_pins_radius,
-                self.base_to_pillar_pins_height,
-                self.base_pillar_pin_to_center_distance,
-            )
-
-        heatsert_depth = 20
-        # cut heatsert for the base screw
-        all -= (
+        all = base
+        head = (
             Workplane("XY")
-            .moveTo(pillar.get_center().x, pillar.get_center().y)
-            .heatsert(self.base_to_pillar_screw, depth=heatsert_depth)
-        )
-
-        # cut a heatsert for the head screw on top
-        top_circle_center = cq.Vector(
-            pillar.get_center().x, pillar.get_center().y + self.pillar_top_center_offset
-        )
-        all -= (
-            Workplane("XY")
-            .moveTo(top_circle_center.x, top_circle_center.y)
-            .heatsert(self.base_to_pillar_screw, depth=heatsert_depth)
-            .translate((0, 0, self.pillar_height - heatsert_depth))
-        )
-
-        # Add pins for the head attachment
-        for i in range(self.base_to_pillar_pins_count):
-            all += self.__create_pin(
-                self.pillar_height,
-                top_circle_center,
-                i,
-                self.base_to_pillar_pins_count,
-                self.base_to_pillar_pins_radius,
-                self.base_to_pillar_pins_height,
-                self.top_pillar_pin_to_center_distance,
+            .box(
+                self.pillar_top_side_len,
+                self.pillar_top_side_len,
+                self.pillar_top_side_len / 2,
             )
+            .translate(
+                (
+                    base_b_box.center.x,
+                    base_b_box.center.y,
+                    self.pillar_height + self.pillar_top_side_len * 0.25,
+                )
+            )
+        )
+
+        head_cylinder = (
+            Workplane("XZ")
+            .cylinder(self.pillar_top_side_len, self.pillar_top_side_len / 2)
+            .translate(
+                (
+                    base_b_box.center.x,
+                    base_b_box.center.y,
+                    self.pillar_height + self.pillar_top_side_len * 0.5,
+                )
+            )
+        )
+        head_cylinder_center = head_cylinder.get_center()
+
+        hole_for_head = Workplane("XY").box(
+            self.head_pillar_connector_side,
+            self.head_pillar_connector_depth,
+            self.head_pillar_connector_side,
+        )
+
+        hole_for_head = hole_for_head.rotate_center("Y", 45).translate(
+            (
+                head_cylinder_center.x,
+                head_cylinder_center.y
+                - (self.pillar_top_side_len - self.head_pillar_connector_depth),
+                head_cylinder_center.z,
+            )
+        )
+
+        hole_for_magnet = (
+            Workplane("XZ")
+            .teardrop(self.head_pillar_connector_magnet_radius)
+            .extrude(self.head_pillar_connector_magnet_depth)
+            .translate(
+                (
+                    head_cylinder_center.x,
+                    hole_for_head.get_bbox().ymax
+                    + self.head_pillar_connector_magnet_depth,
+                    head_cylinder_center.z,
+                )
+            )
+        )
+        all += head
+        all += head_cylinder
+        all -= hole_for_head
+        all -= hole_for_magnet
 
         return all
 
     def __create_head(self) -> Workplane:
-        all = self.__create_head_base_shape()
-        all = all.intersect(
-            Workplane("XY").box(
-                2 * self.pillar_top_radius, 2 * self.pillar_top_radius, 35
+        front = (
+            Workplane("XY")
+            .box(
+                self.head_front_side_len,
+                self.head_front_side_len,
+                self.head_front_thickness,
             )
-        )
-        return all
-
-    def __create_head_cap(self) -> Workplane:
-        all = self.__create_head_base_shape()
-        all -= Workplane("XY").box(
-            2 * self.pillar_top_radius, 2 * self.pillar_top_radius, 35
+            .faces()
+            .fillet(self.head_front_thickness / 4)
         )
 
-        return all
-
-    def __create_head_base_shape(self) -> Workplane:
-
-        all = (
+        magnet_hole = (
             Workplane("XZ")
-            .lineTo(self.pillar_top_radius, 0)
-            .bezier(
-                [
-                    (self.pillar_top_radius, 0),
-                    (self.pillar_top_radius, 3),
-                    (self.pillar_top_radius * 0.8, 18),
-                    (self.pillar_top_radius * 0.2, 22),
-                    (4, 30),
-                    (0, 30.2),
-                ]
+            .teardrop(self.head_clip_magnet_radius)
+            .extrude(self.head_clip_magnet_depth)
+        )
+        front_bbox = front.get_bbox()
+        front_center = front_bbox.center
+        z_offset = front_bbox.center.z
+        magnet_hole = magnet_hole.translate((0, 0, z_offset))
+        front -= magnet_hole.translate(
+            (
+                front_center.x - 4,
+                (-self.head_front_side_len / 2) + self.head_clip_magnet_depth,
+                0,
             )
-            .close()
-            .revolve(axisStart=cq.Vector(0, 0, 0), axisEnd=cq.Vector(0, 1, 0))
+        )
+        front -= magnet_hole.translate(
+            (
+                front_center.x + 4,
+                (-self.head_front_side_len) / 2 + self.head_clip_magnet_depth,
+                0,
+            )
+        )
+        front -= magnet_hole.translate(
+            (
+                front_center.x - 4,
+                (self.head_front_side_len / 2),
+                0,
+            )
+        )
+        front -= magnet_hole.translate(
+            (
+                front_center.x + 4,
+                (self.head_front_side_len) / 2,
+                0,
+            )
         )
 
+        connector = (
+            Workplane("XY")
+            .box(
+                self.head_pillar_connector_side - self.head_pillar_connector_clearance,
+                self.head_pillar_connector_side - self.head_pillar_connector_clearance,
+                self.head_pillar_connector_depth - self.head_pillar_connector_clearance,
+            )
+            .rotate_center("Z", 45)
+            .translate((0, 0, self.head_front_thickness))
+        )
+
+        connector_magnet_hole = (
+            Workplane("XY")
+            .circle(self.head_clip_magnet_radius)
+            .extrude(self.head_clip_magnet_depth)
+            .translate((0, 0, connector.get_bbox().zmax - self.head_clip_magnet_depth))
+        )
+
+        all = front + connector - connector_magnet_hole
         return all
+
+    def __create_pillar_base_shape(
+        self, w: Workplane, with_clearance: bool = False
+    ) -> Workplane:
+        length = self.pillar_base_length
+        width = self.pillar_base_width
+        side_thickness = self.pillar_base_side_thickness
+        top_thickness = self.pillar_base_top_thickness
+        if with_clearance:
+            length += 2 * self.pillar_base_clearance
+            width += 2 * self.pillar_base_clearance
+            side_thickness += 2 * self.pillar_base_clearance
+            top_thickness += 2 * self.pillar_base_clearance
+
+        return w.parabolic_channel(
+            length=length,
+            width=width,
+            side_thickness=side_thickness,
+            top_thickness=top_thickness,
+        )
 
     def __create_pin(
         self,

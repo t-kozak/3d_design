@@ -20,12 +20,15 @@ class DrawerBoxParams:
     drawer_clearance = 0.2
 
     box_wall_thickness = 10.0
-    box_base_thickness = 2.0
+    box_base_thickness = 4.0
     box_top_thickness = 5.5
     box_radius = 5.0
 
     screw_type = MScrew.M2
+    screw_core_length = 8.0
     screw_head_height = 5.0
+    screw_heatsert_depth = 4.0
+
     content_length: float
     content_width: float
     content_height: float
@@ -201,8 +204,17 @@ class ParametricDrawerBox:
 
         all = box - drawer_hole
         _log.debug("Adding screw holes to box base")
+        screw_hole_core_length = (
+            self.__p.screw_core_length - self.__p.screw_heatsert_depth
+        )
+        screw_head_height = box.get_bbox().zlen - screw_hole_core_length
         for center in self._get_box_screw_hole_centers():
-            all = all - self._create_box_screw_hole(center)
+            all = all - Workplane("XY").moveTo(*center).screw_hole(
+                self.__p.screw_type,
+                core_length=screw_hole_core_length,
+                head_height=screw_head_height,
+                head_on_top=False,
+            )
 
         elapsed_time = time.time() - start_time
         _log.debug(f"create_box_base completed in {elapsed_time:.3f} seconds")
@@ -243,21 +255,6 @@ class ParametricDrawerBox:
             (high_x, low_y),
             (high_x, high_y),
         ]
-
-    def _create_box_screw_hole(self, center: tuple[float, float]) -> Workplane:
-        screw_hole = (
-            Workplane("XY")
-            .moveTo(*center)
-            .circle(self.__p.screw_type.head_diameter / 2 + 0.2)
-            .extrude(self.__p.screw_head_height)
-        )
-        screw_hole += (
-            Workplane("XY")
-            .moveTo(*center)
-            .circle(self.__p.screw_type.core_diameter / 2 + 0.1)
-            .extrude(100)
-        )
-        return screw_hole
 
     def __create_box_body(self, height: float, add_texture: bool) -> Workplane:
         _log.debug("Creating box body...")
@@ -330,6 +327,16 @@ if __name__ == "__main__":
         # top_texture=texture,
     )
     dbox = ParametricDrawerBox(params)
-    show(dbox.create_assembly(), axes=True, axes0=True)
+    # show(dbox.create_assembly(), axes=True, axes0=True)
 
     _log.info("ParametricDrawerBox example completed")
+
+    top = dbox.create_box_top()
+    base = dbox.create_box_base()
+
+    top = top.intersect(Workplane("XY").box(20, 20, 100).translate((10, 20, 0)))
+    top.export("top_sampler.stl")
+
+    base = base.intersect(Workplane("XY").box(40, 40, 100))
+    base.export("base_sampler.stl")
+    show(base)

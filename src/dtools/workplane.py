@@ -54,10 +54,17 @@ class Workplane(cq.Workplane):
         return cast(Self, m_screw.create_screw_core_hole(self, screw, depth))
 
     def screw_hole(
-        self, screw: m_screw.MScrew, body_depth: float, head_on_top: bool = True
+        self,
+        screw: m_screw.MScrew,
+        core_length: float,
+        head_on_top: bool = True,
+        head_height: float | None = None,
     ) -> Self:
         return cast(
-            Self, m_screw.create_screw_hole(self, screw, body_depth, head_on_top)
+            Self,
+            m_screw.create_screw_hole(
+                self, screw, core_length, head_on_top, head_height
+            ),
         )
 
     def parabolic_channel(
@@ -93,3 +100,16 @@ class Workplane(cq.Workplane):
             return val.BoundingBox()
         else:
             raise ValueError(f"Invalid type: {type(val)}")
+
+    def rotate_center(self, axis: Literal["X", "Y", "Z"], angle: float) -> Self:
+        center = self.get_center()
+        if axis == "X":
+            start_vector = (center.x, center.y, center.z)
+            end_vector = (center.x + 1, center.y, center.z)
+        elif axis == "Y":
+            start_vector = (center.x, center.y, center.z)
+            end_vector = (center.x, center.y + 1, center.z)
+        elif axis == "Z":
+            start_vector = (center.x, center.y, center.z)
+            end_vector = (center.x, center.y, center.z + 1)
+        return self.rotate(start_vector, end_vector, angle)

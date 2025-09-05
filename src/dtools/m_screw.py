@@ -403,10 +403,11 @@ def create_screw_hole(
     core_depth: float,
     head_on_top: bool = True,
     head_height: float | None = None,
+    clearance: float = 0.2,
 ) -> "Workplane":
-    head_height = head_height or screw.head_height_min
-    core = wp.circle(screw.body_diameter_min / 2).extrude(core_depth)
-    head = wp.circle(screw.head_diameter_min / 2).extrude(head_height)
+    head_height = head_height or screw.head_height_max
+    core = wp.circle(screw.body_diameter_max / 2 + clearance).extrude(core_depth)
+    head = wp.circle(screw.head_diameter_max / 2 + clearance).extrude(head_height)
     if head_on_top:
         head = head.translate((0, 0, core_depth))
     else:

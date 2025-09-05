@@ -7,14 +7,17 @@ if TYPE_CHECKING:
 
 
 def parabolic_channel(
-    workplane: Workplane,
+    workplane: "Workplane",
     length=60.0,
     width=40.0,
     side_thickness=10.0,
     top_thickness=10.0,
-):
+) -> "Workplane":
     return (
-        workplane.spline([(length / 2, width), (length, 0)], includeCurrent=True)
+        workplane
+        # Top parabola
+        .spline([(length / 2, width), (length, 0)], includeCurrent=True)
+        # Smooth right bottom leg
         .spline(
             [
                 (length - (side_thickness / 2), -(side_thickness / 3)),
@@ -22,13 +25,15 @@ def parabolic_channel(
             ],
             includeCurrent=True,
         )
+        # bottom parabola
         .spline(
             [
-                ((length - side_thickness) / 2, width - top_thickness),
+                (length / 2, width - top_thickness),
                 (side_thickness, 0),
             ],
             includeCurrent=True,
         )
+        # Smooth left bottom leg
         .spline(
             [(side_thickness / 2, -(side_thickness / 3)), (0, 0)], includeCurrent=True
         )
