@@ -6,16 +6,26 @@ from ocp_vscode import show
 
 from dtools import m_screw
 from dtools.dbox import DrawerBoxParams, ParametricDrawerBox
+from dtools.texture.hex import HoneycombTexture
 from dtools.workplane import Workplane
 
 
 class CalMaker:
 
     base_box_params = DrawerBoxParams(
-        content_length=160.0,
-        content_width=110.0,
-        content_height=30.0,
-        box_top_thickness=7.0,
+        content_length=152.0,
+        content_width=102.0,
+        content_height=15.0,
+        box_top_thickness=5.0,
+        top_texture=HoneycombTexture(
+            hex_side_len=5,
+            hex_height_min=0,
+            hex_height_max=3,
+            height_steps=3,
+            rotation_degrees=37.0,
+            spacing_coefficient=0.85,
+            random_seed=123432,
+        ),
     )
 
     base_to_pillar_screw = m_screw.MScrew.M3
@@ -37,7 +47,7 @@ class CalMaker:
     head_pillar_connector_depth = 15.0
     head_pillar_connector_magnet_radius = 5.0 / 2
     head_pillar_connector_magnet_depth = 1.8
-    head_pillar_connector_clearance = 0.2
+    head_pillar_connector_clearance = 0.4
 
     head_front_side_len = 20.0
     head_front_thickness = 12.0
@@ -99,24 +109,50 @@ class CalMaker:
     def export_all_for_printing(self):
         output = Path("build") / "cal"
         output.mkdir(parents=True, exist_ok=True)
-        self.__create_head().export(str(output / "head.stl"))
+        self.__create_head().export(output / "head.stl")
+
+        # Pillar
         pillar = self.__create_pillar()
-        pillar_head_sample = pillar - Workplane("XY").box(
-            1000,
-            1000,
-            180,
+        (pillar - Workplane("XY").box(1000, 1000, 180)).export(
+            output / "sample_pillar_head.stl",
+            tolerance=0.01,
+            angularTolerance=0.01,
         )
-        pillar_head_sample.export(str(output / "pillar_head_sample.stl"))
-        # self.base_box.create_box_base().export("base_base.stl")
-        # self.base_box.create_box_top().export("base_top.stl")
-        # self.base_box.create_drawer().export("drawer.stl")
+        (pillar.intersect(Workplane("XY").box(1000, 1000, 20))).export(
+            output / "sample_pillar_base.stl",
+            tolerance=0.01,
+            angularTolerance=0.01,
+        )
+
+        # Base top
+        box_top = self.__create_base_top(for_printing=True)
+        translation_vec = box_top.get_center() - pillar.get_center()
+        print(f"translation_vec: {translation_vec}")
+        (
+            box_top.intersect(
+                Workplane("XY")
+                .moveTo(box_top.get_center().x, box_top.get_center().y)
+                .box(pillar.get_bbox().xlen + 3, pillar.get_bbox().ylen + 3, 100)
+            )
+        ).export(
+            output / "sample_base_top.stl",
+            tolerance=0.01,
+            angularTolerance=0.01,
+        )
+        box_top.export(output / "base_top.stl")
+
+        # Rest of the base
+        self.base_box.create_box_base().export(output / "base_base.stl")
+        self.base_box.create_drawer().export(output / "drawer.stl")
 
     def __create_base_top(self, for_printing: bool = False) -> Workplane:
         top_base = self.base_box.create_box_top()
         base_bbox = top_base.get_bbox()
 
         center = top_base.get_center()
-        pillar_hole_plane_z_offset = base_bbox.zmax - self.pillar_base_hole_depth
+        pillar_hole_plane_z_offset = (
+            self.base_box_params.box_top_thickness - self.pillar_base_hole_depth
+        )
 
         # Create pillar hole at the center of the top face
         pillar_hole = Workplane("XY").workplane(offset=pillar_hole_plane_z_offset)
@@ -284,7 +320,7 @@ class CalMaker:
             .box(
                 self.head_pillar_connector_side - self.head_pillar_connector_clearance,
                 self.head_pillar_connector_side - self.head_pillar_connector_clearance,
-                self.head_pillar_connector_depth - self.head_pillar_connector_clearance,
+                self.head_pillar_connector_depth - 2,
             )
             .rotate_center("Z", 45)
             .translate((0, 0, self.head_front_thickness))
@@ -332,32 +368,6 @@ class CalMaker:
             side_thickness=side_thickness,
             top_thickness=top_thickness,
         )
-
-    def __create_pin(
-        self,
-        z_offset: float,
-        center: cq.Vector,
-        idx: int,
-        count: int,
-        radius: float,
-        height: float,
-        distance_to_center: float,
-    ) -> Workplane:
-        pin = (
-            Workplane("XY")
-            .workplane(offset=z_offset)
-            .moveTo(center.x, center.y)
-            .polar_move_to(
-                idx / count * 2 * math.pi,
-                distance_to_center,
-                relative=True,
-            )
-            .circle(radius)
-            .extrude(height)
-            .faces(">Z")
-            .fillet(radius)
-        )
-        return pin
 
 
 if __name__ == "__main__":

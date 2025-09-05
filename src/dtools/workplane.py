@@ -1,21 +1,40 @@
 import enum
+import logging
 import math
+from pathlib import Path
 import random
-from typing import Literal, Self, cast, TYPE_CHECKING
+from typing import (
+    Any,
+    Dict,
+    Literal,
+    Optional,
+    Self,
+    TYPE_CHECKING,
+    Union,
+    cast,
+    override,
+)
 
 import cadquery as cq
-
 
 from . import teardrop
 from . import heatserts
 from . import m_screw
 from . import parabolic
 
+_log = logging.getLogger(__name__)
+
+
 if TYPE_CHECKING:
     from .texture import TextureDetails
 
 
 class Workplane(cq.Workplane):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.allow_clean = True
+
     def teardrop(
         self, radius: float = 1, rotate: float = 0, clip: float | None = None
     ) -> Self:
@@ -113,3 +132,57 @@ class Workplane(cq.Workplane):
             start_vector = (center.x, center.y, center.z)
             end_vector = (center.x, center.y, center.z + 1)
         return self.rotate(start_vector, end_vector, angle)
+
+    @override
+    def cut(
+        self,
+        toCut: Union["cq.Workplane", cq.Solid, cq.Compound],
+        clean: bool = True,
+        tol: Optional[float] = None,
+    ) -> Self:
+        self.__merge_allow_clean(toCut)
+        clean = clean and self.allow_clean
+        _log.debug(f"cutting. clean? {clean}")
+        return cast(Self, super().cut(toCut, clean, tol))
+
+    def intersect(
+        self,
+        toIntersect: Union["cq.Workplane", cq.Solid, cq.Compound],
+        clean: bool = True,
+        tol: Optional[float] = None,
+    ) -> Self:
+        self.__merge_allow_clean(toIntersect)
+        clean = clean and self.allow_clean
+        return super().intersect(toIntersect, clean, tol)
+
+    def union(
+        self,
+        toUnion: Optional[Union["cq.Workplane", cq.Solid, cq.Compound]] = None,
+        clean: bool = True,
+        glue: bool = False,
+        tol: Optional[float] = None,
+    ) -> Self:
+        self.__merge_allow_clean(toUnion)
+        clean = clean and self.allow_clean
+        return super().union(toUnion, clean, glue, tol)
+
+    def __merge_allow_clean(self, other) -> None:
+        if not isinstance(other, Workplane):
+            return
+        _log.debug(
+            f"merging allow clean. self.allow_clean: {self.allow_clean}, other.allow_clean: {other.allow_clean}"
+        )
+        self.allow_clean &= other.allow_clean
+        self.allow_clean = False
+        _log.debug(f"merged allow clean. self.allow_clean: {self.allow_clean}")
+
+    def export(
+        self,
+        fname: str | Path,
+        tolerance: float = 0.1,
+        angularTolerance: float = 0.1,
+        opt: Optional[Dict[str, Any]] = None,
+    ) -> Self:
+        if isinstance(fname, Path):
+            fname = str(fname)
+        return super().export(fname, tolerance, angularTolerance, opt)

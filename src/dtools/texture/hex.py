@@ -34,7 +34,7 @@ class HoneycombTexture(TextureDetails):
     height_steps: int = 10
     rotation_degrees: float = 0.0
     spacing_coefficient: float = 1.0
-    random_seed: int | None = None
+    random_seed: int = 42
 
 
 def add_hex_texture_to_faces(
@@ -111,13 +111,11 @@ def add_hex_texture_to_faces(
         _log.debug(f"Clipping hex texture with face solid...")
         clipped_texture = hex_texture.intersect(face_solid)
         _log.debug(f"Clipping hex texture with face solid... done")
-        cq.exporters.export(
-            exportType="BREP", w=clipped_texture, fname="clipped_texture.brep"
-        )
         _log.debug(f"Union hex texture with result...")
-        result = result.union(hex_texture)
+        result = result.union(clipped_texture, clean=False)
         _log.debug(f"Union hex texture with result... done")
 
+    result.allow_clean = False
     return result
 
 
