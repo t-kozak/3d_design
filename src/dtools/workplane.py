@@ -46,8 +46,22 @@ class Workplane(cq.Workplane):
         size: m_screw.MScrew = m_screw.MScrew.M4,
         depth: float | None = None,
         depth_clearance: float = 0.2,
+        guide_hole_location: Literal["top", "bottom"] | None = None,
+        guide_hole_depth: float = 0.5,
+        guide_hole_clearance: float = 0.2,
     ) -> Self:
-        return cast(Self, heatserts.heatsert(self, size, depth, depth_clearance))
+        return cast(
+            Self,
+            heatserts.heatsert(
+                self,
+                size,
+                depth,
+                depth_clearance,
+                guide_hole_location,
+                guide_hole_depth,
+                guide_hole_clearance,
+            ),
+        )
 
     def texture(self, details: "TextureDetails", show_progress: bool = False) -> Self:
         # Import here to avoid circular import

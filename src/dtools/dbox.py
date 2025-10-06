@@ -35,6 +35,10 @@ class DrawerBoxParams:
     content_height: float = 10.0
     top_texture: TextureDetails | None = None
 
+    add_drawer_magnets: bool = False
+    drawer_magnet_radius: float = 3.92 / 2
+    drawer_magnet_depth: float = 2.0
+
 
 class ParametricDrawerBox:
 
@@ -141,6 +145,33 @@ class ParametricDrawerBox:
         )
         all = drawer + front
 
+        if self.__p.add_drawer_magnets:
+            _log.debug(f"Adding drawer magnets.")
+            all -= (
+                Workplane("XZ")
+                .teardrop(self.__p.drawer_magnet_radius)
+                .extrude(self.__p.drawer_magnet_depth)
+                .translate(
+                    (
+                        self.__p.box_wall_thickness / 2,
+                        self.__p.box_wall_thickness,
+                        self.__base_height / 2 - self.__p.box_base_thickness,
+                    )
+                )
+            )
+            all -= (
+                Workplane("XZ")
+                .teardrop(self.__p.drawer_magnet_radius)
+                .extrude(self.__p.drawer_magnet_depth)
+                .translate(
+                    (
+                        self.__box_length - self.__p.box_wall_thickness / 2,
+                        self.__p.box_wall_thickness,
+                        self.__base_height / 2 - self.__p.box_base_thickness,
+                    )
+                )
+            )
+
         elapsed_time = time.time() - start_time
         _log.debug(f"create_drawer completed in {elapsed_time:.3f} seconds")
         return all
@@ -218,6 +249,36 @@ class ParametricDrawerBox:
             )
 
         elapsed_time = time.time() - start_time
+
+        if self.__p.add_drawer_magnets:
+            z_offset = self.__base_height / 2
+            y_offset = self.__p.box_wall_thickness + self.__p.drawer_magnet_depth
+            _log.debug(f"Adding drawer magnets.")
+            all -= (
+                Workplane("XZ")
+                .teardrop(self.__p.drawer_magnet_radius)
+                .extrude(self.__p.drawer_magnet_depth)
+                .translate(
+                    (
+                        self.__p.box_wall_thickness / 2,
+                        y_offset,
+                        z_offset,
+                    )
+                )
+            )
+            all -= (
+                Workplane("XZ")
+                .teardrop(self.__p.drawer_magnet_radius)
+                .extrude(self.__p.drawer_magnet_depth)
+                .translate(
+                    (
+                        self.__box_length - self.__p.box_wall_thickness / 2,
+                        y_offset,
+                        z_offset,
+                    )
+                )
+            )
+
         _log.debug(f"create_box_base completed in {elapsed_time:.3f} seconds")
         return all
 
@@ -238,7 +299,11 @@ class ParametricDrawerBox:
 
         _log.debug(f"Adding heatserts to box top.")
         for center in self._get_box_screw_hole_centers():
-            heatsert = Workplane("XY").moveTo(*center).heatsert(self.__p.screw_type)
+            heatsert = (
+                Workplane("XY")
+                .moveTo(*center)
+                .heatsert(self.__p.screw_type, guide_hole_location="bottom")
+            )
             _log.debug(f"Adding heatsert to box top.")
             all -= heatsert
 
@@ -305,6 +370,8 @@ class ParametricDrawerBox:
 
 
 if __name__ == "__main__":
+    Workplane.auto_clean = False
+
     # Setup basic logging
     logging.basicConfig(
         level=logging.DEBUG,
@@ -323,22 +390,23 @@ if __name__ == "__main__":
         height_steps=3,
     )
     params = DrawerBoxParams(
-        content_length=15.0,
-        content_width=15.0,
-        content_height=10.0,
+        content_length=50.0,
+        content_width=50.0,
+        content_height=15.0,
         top_texture=texture,
+        add_drawer_magnets=True,
     )
     dbox = ParametricDrawerBox(params)
     show(dbox.create_assembly(), axes=True, axes0=True)
 
-    _log.info("ParametricDrawerBox example completed")
+    # _log.info("ParametricDrawerBox example completed")
 
-    top = dbox.create_box_top()
-    base = dbox.create_box_base()
-    drawer = dbox.create_drawer()
-
-    outp = Path("build/dbox")
-    outp.mkdir(parents=True, exist_ok=True)
-    top.export(outp / "top.stl")
-    base.export(outp / "base.stl")
-    drawer.export(outp / "drawer.stl")
+    # # top = dbox.create_box_top()
+    # # base = dbox.create_box_base()
+    # drawer = dbox.create_drawer()
+    # show(drawer)
+    # outp = Path("build/dbox")
+    # outp.mkdir(parents=True, exist_ok=True)
+    # # top.export(outp / "top.stl")
+    # # base.export(outp / "base.stl")
+    # drawer.export(outp / "drawer.stl")

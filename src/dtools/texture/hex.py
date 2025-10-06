@@ -115,7 +115,6 @@ def add_hex_texture_to_faces(
         result = result.union(clipped_texture, clean=False)
         _log.debug(f"Union hex texture with result... done")
 
-    result.allow_clean = False
     return result
 
 

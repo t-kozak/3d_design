@@ -4,7 +4,7 @@ from pathlib import Path
 import cadquery as cq
 from ocp_vscode import show
 
-from design_tools.workplane import Workplane
+from dtools.workplane import Workplane
 
 assert show is not None
 
