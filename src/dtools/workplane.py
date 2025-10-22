@@ -1,15 +1,13 @@
-import enum
 import logging
 import math
 from pathlib import Path
-import random
 from typing import (
+    TYPE_CHECKING,
     Any,
     Dict,
     Literal,
     Optional,
     Self,
-    TYPE_CHECKING,
     Union,
     cast,
     override,
@@ -17,10 +15,7 @@ from typing import (
 
 import cadquery as cq
 
-from . import teardrop
-from . import heatserts
-from . import m_screw
-from . import parabolic
+from . import parabolic, teardrop
 
 _log = logging.getLogger(__name__)
 
@@ -30,7 +25,6 @@ if TYPE_CHECKING:
 
 
 class Workplane(cq.Workplane):
-
     auto_clean: bool = True
 
     def __init__(self, *args, **kwargs):
@@ -40,28 +34,6 @@ class Workplane(cq.Workplane):
         self, radius: float = 1, rotate: float = 0, clip: float | None = None
     ) -> Self:
         return cast(Self, teardrop.teardrop(self, radius, rotate, clip))
-
-    def heatsert(
-        self,
-        size: m_screw.MScrew = m_screw.MScrew.M4,
-        depth: float | None = None,
-        depth_clearance: float = 0.2,
-        guide_hole_location: Literal["top", "bottom"] | None = None,
-        guide_hole_depth: float = 0.5,
-        guide_hole_clearance: float = 0.2,
-    ) -> Self:
-        return cast(
-            Self,
-            heatserts.heatsert(
-                self,
-                size,
-                depth,
-                depth_clearance,
-                guide_hole_location,
-                guide_hole_depth,
-                guide_hole_clearance,
-            ),
-        )
 
     def texture(self, details: "TextureDetails", show_progress: bool = False) -> Self:
         # Import here to avoid circular import
@@ -84,23 +56,6 @@ class Workplane(cq.Workplane):
 
         # Delegate to base class moveTo method
         return cast(Self, self.moveTo(x, y))
-
-    def screw_core_hole(self, screw: m_screw.MScrew, depth: float) -> Self:
-        return cast(Self, m_screw.create_screw_core_hole(self, screw, depth))
-
-    def screw_hole(
-        self,
-        screw: m_screw.MScrew,
-        core_length: float,
-        head_on_top: bool = True,
-        head_height: float | None = None,
-    ) -> Self:
-        return cast(
-            Self,
-            m_screw.create_screw_hole(
-                self, screw, core_length, head_on_top, head_height
-            ),
-        )
 
     def parabolic_channel(
         self,
@@ -166,7 +121,6 @@ class Workplane(cq.Workplane):
         clean: bool = True,
         tol: Optional[float] = None,
     ) -> Self:
-
         clean = clean and self.auto_clean
         return super().intersect(toIntersect, clean, tol)
 

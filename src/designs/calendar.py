@@ -1,7 +1,6 @@
-from ctypes import cast
 import logging
-import math
 from pathlib import Path
+
 import cadquery as cq
 from ocp_vscode import show
 
@@ -16,7 +15,6 @@ Workplane.auto_clean = False
 
 
 class CalMaker:
-
     base_box_params = DrawerBoxParams(
         content_length=155.0,
         content_width=105.0,
@@ -34,7 +32,7 @@ class CalMaker:
         ),
     )
 
-    base_to_pillar_screw = m_screw.MScrew.M3
+    base_to_pillar_screw = m_screw.MScrewType.M3
     base_to_pillar_screw_core_length = 10.0
     base_to_pillar_screw_head_height = 3.0
     base_to_pillar_screw_head_height = 3.0
@@ -205,9 +203,7 @@ class CalMaker:
         # Create pillar hole at the center of the top face
         _log.debug("Creating pillar hole in base top")
         pillar_hole = Workplane("XY").workplane(offset=pillar_hole_plane_z_offset)
-        pillar_hole = self.__create_pillar_base_shape(
-            pillar_hole, with_clearance=True
-        ).extrude(100)
+        pillar_hole = self.__create_pillar_base_shape(pillar_hole, with_clearance=True).extrude(100)
         pillar_center = pillar_hole.get_center()
         center_diff = center - pillar_center
         pillar_hole = pillar_hole.translate((center_diff.x, center_diff.y, 0))
@@ -347,8 +343,7 @@ class CalMaker:
             .translate(
                 (
                     head_cylinder_center.x,
-                    hole_for_head.get_bbox().ymax
-                    + self.head_pillar_connector_magnet_depth,
+                    hole_for_head.get_bbox().ymax + self.head_pillar_connector_magnet_depth,
                     head_cylinder_center.z,
                 )
             )
@@ -474,9 +469,7 @@ class CalMaker:
         _log.debug(f"Generated {len(locations)} screw locations")
         return locations
 
-    def __create_pillar_base_shape(
-        self, w: Workplane, with_clearance: bool = False
-    ) -> Workplane:
+    def __create_pillar_base_shape(self, w: Workplane, with_clearance: bool = False) -> Workplane:
         _log.debug(f"Creating pillar base shape (with_clearance={with_clearance})")
         length = self.pillar_base_length
         width = self.pillar_base_width
@@ -489,9 +482,7 @@ class CalMaker:
             side_thickness += 2 * self.pillar_base_clearance
             top_thickness += 2 * self.pillar_base_clearance
 
-        _log.debug(
-            f"Creating parabolic channel: {length}x{width}x{side_thickness}x{top_thickness}"
-        )
+        _log.debug(f"Creating parabolic channel: {length}x{width}x{side_thickness}x{top_thickness}")
         return w.parabolic_channel(
             length=length,
             width=width,

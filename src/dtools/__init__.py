@@ -4,12 +4,10 @@
 A collection of tools for 3D design using CadQuery.
 """
 
-from .workplane import Workplane
-from .m_screw import MScrew
 from .dbox import ParametricDrawerBox
+from .workplane import Workplane
 
 __all__ = [
     "Workplane",
-    "MScrew",
     "ParametricDrawerBox",
 ]

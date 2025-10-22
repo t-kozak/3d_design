@@ -1,16 +1,13 @@
+import logging
+import time
 from dataclasses import dataclass
 
-import logging
-from pathlib import Path
-import time
-
-
-from .texture.tex_details import TextureDetails
-from .texture import HoneycombTexture
-from .m_screw import MScrew
-from .workplane import Workplane
-from ocp_vscode import show
 import cadquery as cq
+from ocp_vscode import show
+
+from .texture import HoneycombTexture
+from .texture.tex_details import TextureDetails
+from .workplane import Workplane
 
 _log = logging.getLogger(__name__)
 
@@ -25,7 +22,7 @@ class DrawerBoxParams:
     box_top_thickness: float = 5.5
     box_radius: float = 5.0
 
-    screw_type = MScrew.M2
+    screw_type = None
     screw_core_length: float = 8.0
     screw_head_height: float = 5.0
     screw_heatsert_depth: float = 4.4
@@ -41,7 +38,6 @@ class DrawerBoxParams:
 
 
 class ParametricDrawerBox:
-
     def __init__(self, params: DrawerBoxParams) -> None:
         _log.debug(
             f"Initializing ParametricDrawerBox with dimensions: {params.content_length}x{params.content_width}x{params.content_height}"
@@ -72,7 +68,6 @@ class ParametricDrawerBox:
         ass.add(
             self.create_drawer(),
             name="drawer",
-            color=cq.Color("red"),
             loc=cq.Location(
                 (
                     0,
@@ -146,7 +141,7 @@ class ParametricDrawerBox:
         all = drawer + front
 
         if self.__p.add_drawer_magnets:
-            _log.debug(f"Adding drawer magnets.")
+            _log.debug("Adding drawer magnets.")
             all -= (
                 Workplane("XZ")
                 .teardrop(self.__p.drawer_magnet_radius)
@@ -240,20 +235,20 @@ class ParametricDrawerBox:
             self.__p.screw_core_length - self.__p.screw_heatsert_depth
         )
         screw_head_height = box.get_bbox().zlen - screw_hole_core_length
-        for center in self._get_box_screw_hole_centers():
-            all = all - Workplane("XY").moveTo(*center).screw_hole(
-                self.__p.screw_type,
-                core_length=screw_hole_core_length,
-                head_height=screw_head_height,
-                head_on_top=False,
-            )
+        # for center in self._get_box_screw_hole_centers():
+        #     all = all - Workplane("XY").moveTo(*center).screw_hole(
+        #         self.__p.screw_type,
+        #         core_length=screw_hole_core_length,
+        #         head_height=screw_head_height,
+        #         head_on_top=False,
+        #     )
 
         elapsed_time = time.time() - start_time
 
         if self.__p.add_drawer_magnets:
             z_offset = self.__base_height / 2
             y_offset = self.__p.box_wall_thickness + self.__p.drawer_magnet_depth
-            _log.debug(f"Adding drawer magnets.")
+            _log.debug("Adding drawer magnets.")
             all -= (
                 Workplane("XZ")
                 .teardrop(self.__p.drawer_magnet_radius)
@@ -288,7 +283,7 @@ class ParametricDrawerBox:
 
         # Create top body
         all = self.__create_box_body(self.__p.box_top_thickness, True)
-        _log.debug(f"Box top body created, cutting front.")
+        _log.debug("Box top body created, cutting front.")
         # Cut off space for the drawer's front
         all -= Workplane("XY").box(
             self.__box_length,
@@ -297,15 +292,16 @@ class ParametricDrawerBox:
             centered=False,
         )
 
-        _log.debug(f"Adding heatserts to box top.")
+        _log.debug("Adding heatserts to box top.")
         for center in self._get_box_screw_hole_centers():
-            heatsert = (
-                Workplane("XY")
-                .moveTo(*center)
-                .heatsert(self.__p.screw_type, guide_hole_location="bottom")
-            )
-            _log.debug(f"Adding heatsert to box top.")
-            all -= heatsert
+            pass
+            # # heatsert = (
+            # #     Workplane("XY")
+            # #     .moveTo(*center)
+            # #     .heatsert(self.__p.screw_type, guide_hole_location="bottom")
+            # # )
+            # _log.debug("Adding heatsert to box top.")
+            # all -= heatsert
 
         elapsed_time = time.time() - start_time
         _log.debug(f"create_box_top completed in {elapsed_time:.3f} seconds")
@@ -337,8 +333,8 @@ class ParametricDrawerBox:
                 self.__p.top_texture,
                 show_progress=True,
             )
-            _log.debug(f"Applying texture to top face... done;")
-        _log.debug(f"Creating box body... done; allow clean?")
+            _log.debug("Applying texture to top face... done;")
+        _log.debug("Creating box body... done; allow clean?")
         return box
 
     @property
