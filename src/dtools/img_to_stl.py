@@ -1,7 +1,7 @@
 from pathlib import Path
+
 import numpy as np
 from PIL import Image
-from tqdm import tqdm
 from stl import mesh
 
 
@@ -305,7 +305,7 @@ def img_to_stl(
     if grey_depth < 2:
         raise ValueError("grey_depth must be at least 2")
 
-    print(f"Converting image to 3D STL mosaic...")
+    print("Converting image to 3D STL mosaic...")
     print(f"Input: {img_path}")
     print(f"Output: {output_path}")
     print(f"Resolution: {cols}x{rows} pixels")
@@ -333,7 +333,7 @@ def img_to_stl(
         output_path=output_path,
     )
 
-    print(f"\nConversion complete!")
+    print("\nConversion complete!")
     print(f"STL file saved to: {output_path}")
     print(f"Mesh contains {len(stl_mesh.vectors)} triangles")
 
@@ -341,24 +341,34 @@ def img_to_stl(
 
 
 if __name__ == "__main__":
-    imgs = ["dad", "clam", "mountain", "airpods"]
+    imgs = ["dog"]
 
     for img in imgs:
-        input_img = Path(f"images/{img}.jpg")
+        input_img = Path(f"images/{img}.png")
         if input_img.exists():
-            print(f"\n{'='*60}")
+            print(f"\n{'=' * 60}")
             print(f"Processing: {img}")
-            print(f"{'='*60}")
+            print(f"{'=' * 60}")
 
             # Process normal version
-            output_stl = Path(f"{img}.stl")
+            output_stl = Path(f"build/{img}.stl")
             try:
-                img_to_stl(input_img, output_stl)
+                img_to_stl(
+                    input_img,
+                    output_stl,
+                    rows=250,
+                    cols=250,
+                    width=27.8,
+                    height=8.8,
+                    depth_min=0.0,
+                    depth_max=9.5,
+                    grey_depth=20,
+                )
             except Exception as e:
                 print(f"Error processing normal version: {e}")
 
             # Process inverted version
-            output_stl_inverted = Path(f"{img}_inverted.stl")
+            output_stl_inverted = Path(f"build/{img}_inverted.stl")
             try:
                 # First convert to grayscale
                 grayscale_array = image_to_grayscale(input_img, cols=128, rows=128)
@@ -369,10 +379,10 @@ if __name__ == "__main__":
                 # Convert inverted array to STL
                 stl_mesh = grayscale_to_stl(
                     pixel_values=inverted_array,
-                    width=100.0,
-                    height=100.0,
-                    depth_min=1.0,
-                    depth_max=8.0,
+                    width=27.8,
+                    height=8.8,
+                    depth_min=0.0,
+                    depth_max=9.5,
                     output_path=output_stl_inverted,
                 )
 
