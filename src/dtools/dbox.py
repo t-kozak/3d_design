@@ -5,6 +5,9 @@ from dataclasses import dataclass
 import cadquery as cq
 from ocp_vscode import show
 
+from dtools.joints.heatsert_joint import HeatsertJoint
+from dtools.primitives.screws import MetricScrews, Screw
+
 from .texture import HoneycombTexture
 from .texture.tex_details import TextureDetails
 from .workplane import Workplane
@@ -22,10 +25,7 @@ class DrawerBoxParams:
     box_top_thickness: float = 5.5
     box_radius: float = 5.0
 
-    screw_type = None
-    screw_core_length: float = 8.0
-    screw_head_height: float = 5.0
-    screw_heatsert_depth: float = 4.4
+    screw_cfg: Screw = MetricScrews.M3.copy_with(length=5.0)
 
     content_length: float = 10.0
     content_width: float = 10.0
@@ -40,11 +40,15 @@ class DrawerBoxParams:
 class ParametricDrawerBox:
     def __init__(self, params: DrawerBoxParams) -> None:
         _log.debug(
-            f"Initializing ParametricDrawerBox with dimensions: {params.content_length}x{params.content_width}x{params.content_height}"
+            f"Initializing ParametricDrawerBox with dimensions: {params.content_length}"
+            f"x{params.content_width}x{params.content_height}"
         )
         _log.debug(f"Top texture: {params.top_texture}")
         self.__p = params
         _log.debug("ParametricDrawerBox initialization completed")
+        self._joint_cfg = HeatsertJoint(
+            screw=self.__p.screw_cfg, boss_height=3.0, heatsert_length=3
+        )
 
     def create_assembly(self) -> cq.Assembly:
         start_time = time.time()
@@ -189,7 +193,8 @@ class ParametricDrawerBox:
             + self.__p.drawer_clearance
         )
         _log.debug(
-            f"Drawer hole dimensions: {drawer_hole_length}x{drawer_hole_width}x{drawer_hole_height}"
+            f"Drawer hole dimensions: {drawer_hole_length}x{drawer_hole_width}"
+            f"x{drawer_hole_height}"
         )
 
         # Create base body
@@ -231,17 +236,8 @@ class ParametricDrawerBox:
 
         all = box - drawer_hole
         _log.debug("Adding screw holes to box base")
-        screw_hole_core_length = (
-            self.__p.screw_core_length - self.__p.screw_heatsert_depth
-        )
-        screw_head_height = box.get_bbox().zlen - screw_hole_core_length
-        # for center in self._get_box_screw_hole_centers():
-        #     all = all - Workplane("XY").moveTo(*center).screw_hole(
-        #         self.__p.screw_type,
-        #         core_length=screw_hole_core_length,
-        #         head_height=screw_head_height,
-        #         head_on_top=False,
-        #     )
+        for center in self._get_box_screw_hole_centers():
+            all = self._joint_cfg.apply_male(all, "Z<", center)
 
         elapsed_time = time.time() - start_time
 
@@ -294,14 +290,7 @@ class ParametricDrawerBox:
 
         _log.debug("Adding heatserts to box top.")
         for center in self._get_box_screw_hole_centers():
-            pass
-            # # heatsert = (
-            # #     Workplane("XY")
-            # #     .moveTo(*center)
-            # #     .heatsert(self.__p.screw_type, guide_hole_location="bottom")
-            # # )
-            # _log.debug("Adding heatsert to box top.")
-            # all -= heatsert
+            all = self._joint_cfg.apply_female(all, "Z<", center)
 
         elapsed_time = time.time() - start_time
         _log.debug(f"create_box_top completed in {elapsed_time:.3f} seconds")
@@ -393,7 +382,7 @@ if __name__ == "__main__":
         add_drawer_magnets=True,
     )
     dbox = ParametricDrawerBox(params)
-    show(dbox.create_assembly(), axes=True, axes0=True)
+    show(dbox.create_box_top(), axes=True, axes0=True)
 
     # _log.info("ParametricDrawerBox example completed")
 

@@ -83,6 +83,10 @@ class HeatsertJoint(Joint):
         remaining_shaft_length = (
             float(self.screw.length) - self.boss_height - washer_thickness
         )
+        if remaining_shaft_length < 0:
+            raise ValueError(
+                f"Not enough space for heatsert. {remaining_shaft_length = }"
+            )
         # Extend it by some % for safety
         remaining_shaft_length *= 1.05
 

@@ -1,15 +1,14 @@
-from dataclasses import dataclass
 import hashlib
 import logging
 import math
 import os
 import random
+from dataclasses import dataclass
 
 import cadquery as cq
 from stopwatch import Stopwatch
 
 from ..merge import merge_shapes_in_batches_threaded
-
 from ..workplane import Workplane
 from .tex_details import TextureDetails
 
@@ -102,18 +101,18 @@ def add_hex_texture_to_faces(
                 (
                     face.normalAt().multiply(  # pyright: ignore[reportCallIssue]
                         -details.hex_height_max * 1.5
-                    )
-                )  # Offset to center the extrusion
+                    )  # Offset to center the extrusion
+                )
             )
         )
 
         # Only keep hexagons that intersect with the face area
-        _log.debug(f"Clipping hex texture with face solid...")
+        _log.debug("Clipping hex texture with face solid...")
         clipped_texture = hex_texture.intersect(face_solid)
-        _log.debug(f"Clipping hex texture with face solid... done")
-        _log.debug(f"Union hex texture with result...")
+        _log.debug("Clipping hex texture with face solid... done")
+        _log.debug("Union hex texture with result...")
         result = result.union(clipped_texture, clean=False)
-        _log.debug(f"Union hex texture with result... done")
+        _log.debug("Union hex texture with result... done")
 
     return result
 
@@ -537,7 +536,6 @@ def _generate_surface_from_height_groups(
     cache_file = os.path.join(cache_dir, f"{cache_hash}.brep")
 
     if os.path.exists(cache_file):
-
         _log.debug(f"Loading cached result from {cache_file}...")
         try:
             # Load cached Workplane using importBrep
@@ -546,7 +544,6 @@ def _generate_surface_from_height_groups(
             # Convert to our custom Workplane type by creating a new Workplane with the imported object
             return Workplane("XY").newObject([cached_result.val()])
         except Exception as e:
-
             _log.warning(f"Failed to load cache file {cache_file}: {e}")
             # Continue with normal computation if cache loading fails
 
@@ -625,7 +622,7 @@ def _generate_hex_texture_for_face(
     """
     Generate hexagonal texture positioned and oriented for a specific face.
     """
-    _log.debug(f"Generating hex texture for face...")
+    _log.debug("Generating hex texture for face...")
     # Get face center and normal
     face_center = face.Center()
     face_normal = face.normalAt()  # type: ignore
@@ -661,7 +658,7 @@ def _generate_hex_texture_for_face(
     )
 
     if not height_groups:
-        _log.debug(f"Generating hex texture for face... failed - no height groups.")
+        _log.debug("Generating hex texture for face... failed - no height groups.")
         return None
 
     # Generate the surface from height groups
@@ -670,7 +667,7 @@ def _generate_hex_texture_for_face(
     )
 
     if result is None:
-        _log.debug(f"Generating hex texture for face... failed.")
+        _log.debug("Generating hex texture for face... failed.")
         return None
-    _log.debug(f"Generating hex texture for face... done.")
+    _log.debug("Generating hex texture for face... done.")
     return result, u_vec, v_vec
