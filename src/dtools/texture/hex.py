@@ -10,7 +10,7 @@ from stopwatch import Stopwatch
 
 from ..merge import merge_shapes_in_batches_threaded
 from ..workplane import Workplane
-from .tex_details import TextureDetails
+from .tex_details import Texture
 
 _log = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ except ImportError:
 
 
 @dataclass
-class HoneycombTexture(TextureDetails):
+class HoneycombTexture(Texture):
     hex_side_len: float
     hex_height_min: float
     hex_height_max: float
@@ -35,86 +35,21 @@ class HoneycombTexture(TextureDetails):
     spacing_coefficient: float = 1.0
     random_seed: int = 42
 
-
-def add_hex_texture_to_faces(
-    workplane: Workplane,
-    details: HoneycombTexture,
-    show_progress: bool = False,
-) -> Workplane:
-    """
-    Add hexagonal texture to the currently selected faces of a workplane.
-
-    Args:
-        workplane: CadQuery workplane with faces selected
-        details: Details of the honeycomb texture
-
-    Returns:
-        Workplane with hexagonal texture added to selected faces
-    """
-
-    # Get the selected faces
-    selected_faces = workplane.faces()
-
-    if len(selected_faces.vals()) == 0:
-        raise ValueError(
-            "No faces selected. Please select faces before applying texture."
-        )
-
-    result = workplane
-
-    # Process each selected face
-    for face in selected_faces.vals():
+    def _create_for_face(self, face: cq.Face) -> Workplane:
         # Get face bounding box to determine texture area
         assert isinstance(face, cq.Face)
 
         # Generate hex texture for this face
         res = _generate_hex_texture_for_face(
             face,
-            details,
-            show_progress,
+            self,
+            False,
         )
         if not res:
-            continue
-        hex_texture, u_vec, v_vec = res
+            return Workplane()
+        hex_texture, _, __ = res
 
-        # Intersect texture with face boundary to clean up edges
-
-        # Get the face wire (boundary)
-        face_wire = face.outerWire()
-
-        # Create a workplane aligned with the face
-        face_plane_obj = cq.Plane(
-            origin=face.Center(),
-            xDir=u_vec,
-            normal=face.normalAt(),  # pyright: ignore[reportCallIssue]
-        )
-        face_workplane = cq.Workplane(face_plane_obj)
-
-        # Add the face wire to this oriented workplane and extrude along the face normal
-        face_solid = (
-            face_workplane.add(face_wire)
-            .toPending()
-            .extrude(
-                details.hex_height_max * 3
-            )  # Extrude thick enough to encompass all hexagons
-            .translate(
-                (
-                    face.normalAt().multiply(  # pyright: ignore[reportCallIssue]
-                        -details.hex_height_max * 1.5
-                    )  # Offset to center the extrusion
-                )
-            )
-        )
-
-        # Only keep hexagons that intersect with the face area
-        _log.debug("Clipping hex texture with face solid...")
-        clipped_texture = hex_texture.intersect(face_solid)
-        _log.debug("Clipping hex texture with face solid... done")
-        _log.debug("Union hex texture with result...")
-        result = result.union(clipped_texture, clean=False)
-        _log.debug("Union hex texture with result... done")
-
-    return result
+        return self._cut_to_face_boundary(face, hex_texture, self.hex_height_max)
 
 
 def _get_face_coordinate_system(
@@ -163,7 +98,8 @@ def _get_face_coordinate_system(
         cos_theta = math.cos(rotation_radians)
         sin_theta = math.sin(rotation_radians)
 
-        # Rotate u and v vectors around the normal vector using Rodrigues' rotation formula
+        # Rotate u and v vectors around the normal vector using Rodrigues' rotation
+        # formula
         # For rotation around normal vector: new_u = u*cos(θ) + v*sin(θ)
         # new_v = -u*sin(θ) + v*cos(θ)
         rotated_u = u_vec.multiply(cos_theta).add(v_vec.multiply(sin_theta))
@@ -307,7 +243,8 @@ def _calculate_hex_grid(
     Calculate the grid dimensions and spacing for hexagonal texture on a face.
 
     Returns:
-        Tuple of (rows, cols, x_spacing, y_spacing, face_width, face_height, half_width, half_height)
+        Tuple of (rows, cols, x_spacing, y_spacing, face_width, face_height,
+        half_width, half_height)
     """
     # Get face center
     face_center = face.Center()
@@ -345,14 +282,15 @@ def _calculate_hex_grid(
     x_spacing *= details.spacing_coefficient
     y_spacing *= details.spacing_coefficient
 
-    # Calculate grid dimensions with tighter bounds since we're doing intersection checks
-    cols = (
-        int(math.ceil(face_width / x_spacing)) + 1
-    )  # Reduced margin since we check intersections
+    # Calculate grid dimensions with tighter bounds since we're doing
+    # intersection checks
+    # Reduced margin since we check intersections
+    cols = int(math.ceil(face_width / x_spacing)) + 1
     rows = int(math.ceil(face_height / y_spacing)) + 1
 
     _log.debug(
-        f"Hex texture grid: {cols} columns × {rows} rows = {cols * rows} potential positions"
+        f"Hex texture grid: {cols} columns × {rows} rows = "
+        f"{cols * rows} potential positions"
     )
 
     half_width = face_width / 2
@@ -384,10 +322,12 @@ def _create_height_groups(
     v_vec: cq.Vector,
 ) -> dict[float, list[tuple[cq.Vector, float, float]]]:
     """
-    Create height groups by iterating over rows and columns to determine hexagon positions and heights.
+    Create height groups by iterating over rows and columns to determine
+    hexagon positions and heights.
 
     Returns:
-        Dictionary mapping discretized heights to lists of (world_pos, local_x, local_y) tuples
+        Dictionary mapping discretized heights to lists of
+        (world_pos, local_x, local_y) tuples
     """
     # Discretize heights
     height_range = details.hex_height_max - details.hex_height_min
@@ -414,7 +354,13 @@ def _create_height_groups(
 
             # Check if hexagon would intersect with the face before creating it
             if _hex_would_intersect_face(
-                local_x, local_y, details.hex_side_len, face, face_center, u_vec, v_vec
+                local_x,
+                local_y,
+                details.hex_side_len,
+                face,
+                face_center,
+                u_vec,
+                v_vec,
             ):
                 hex_count += 1
 
@@ -436,7 +382,13 @@ def _create_height_groups(
 
             # Check if hexagon would intersect with the face before creating it
             if _hex_would_intersect_face(
-                local_x, local_y, details.hex_side_len, face, face_center, u_vec, v_vec
+                local_x,
+                local_y,
+                details.hex_side_len,
+                face,
+                face_center,
+                u_vec,
+                v_vec,
             ):
                 # Generate random height and discretize
                 random_height = rng.uniform(
@@ -494,11 +446,22 @@ def _generate_cache_hash(
     args_str += f"height_groups:{height_groups_str};"
 
     # Hash face by its key geometric properties
-    face_str = f"face_normal:{face.normalAt()};face_center:{face.Center()};face_area:{face.Area()}"  # pyright: ignore[reportCallIssue]
+    # pyright: ignore[reportCallIssue]
+    face_str = (
+        f"face_normal:{face.normalAt()};"  # pyright: ignore[reportCallIssue]
+        f"face_center:{face.Center()};"
+        f"face_area:{face.Area()}"
+    )
     args_str += f"face:{face_str};"
 
     # Hash details object by its attributes
-    details_str = f"hex_side_len:{details.hex_side_len};hex_height_min:{details.hex_height_min};hex_height_max:{details.hex_height_max};height_steps:{details.height_steps};rotation_degrees:{details.rotation_degrees}"
+    details_str = (
+        f"hex_side_len:{details.hex_side_len};"
+        f"hex_height_min:{details.hex_height_min};"
+        f"hex_height_max:{details.hex_height_max};"
+        f"height_steps:{details.height_steps};"
+        f"rotation_degrees:{details.rotation_degrees}"
+    )
     args_str += f"details:{details_str};"
 
     # Hash vectors
@@ -524,7 +487,8 @@ def _generate_surface_from_height_groups(
     Generate the actual 3D surface from height groups by creating hexagons.
 
     Returns:
-        Workplane containing all the generated hexagons, or None if no hexagons were created
+        Workplane containing all the generated hexagons, or None if no hexagons
+        were created
     """
     # Generate cache hash from input arguments
     cache_hash = _generate_cache_hash(
@@ -541,7 +505,8 @@ def _generate_surface_from_height_groups(
             # Load cached Workplane using importBrep
             cached_result = cq.importers.importBrep(cache_file)
             _log.debug(f"Loaded cached result from {cache_file}... done")
-            # Convert to our custom Workplane type by creating a new Workplane with the imported object
+            # Convert to our custom Workplane type by creating a new Workplane
+            # with the imported object
             return Workplane("XY").newObject([cached_result.val()])
         except Exception as e:
             _log.warning(f"Failed to load cache file {cache_file}: {e}")
@@ -671,3 +636,28 @@ def _generate_hex_texture_for_face(
         return None
     _log.debug("Generating hex texture for face... done.")
     return result, u_vec, v_vec
+
+
+if __name__ == "__main__":
+    from ocp_vscode import show
+
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s - %(levelname)s - %(message)s (%(name)s)",
+        datefmt="%H:%M:%S",
+    )
+    with Stopwatch() as x:
+        _log.info("Starting HexTest example")
+
+        result = Workplane("XY").box(150, 150, 25)
+        result = (
+            result.edges("|Z")
+            .fillet(5)
+            .faces(">Z")
+            .texture(
+                HoneycombTexture(hex_side_len=40, hex_height_min=1, hex_height_max=10),
+            )
+        )
+
+        show(result)
+        _log.info(f"HexTest example completed in {x.elapsed:.2f} seconds")

@@ -9,7 +9,7 @@ from dtools.joints.heatsert_joint import HeatsertJoint
 from dtools.primitives.screws import MetricScrews, Screw
 
 from .texture import HoneycombTexture
-from .texture.tex_details import TextureDetails
+from .texture.tex_details import Texture
 from .workplane import Workplane
 
 _log = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ class DrawerBoxParams:
     content_length: float = 10.0
     content_width: float = 10.0
     content_height: float = 10.0
-    top_texture: TextureDetails | None = None
+    top_texture: Texture | None = None
 
     add_drawer_magnets: bool = False
     drawer_magnet_radius: float = 3.92 / 2
@@ -320,7 +320,6 @@ class ParametricDrawerBox:
             _log.debug("Applying texture to top face...")
             box = box.faces(">Z").texture(
                 self.__p.top_texture,
-                show_progress=True,
             )
             _log.debug("Applying texture to top face... done;")
         _log.debug("Creating box body... done; allow clean?")

@@ -21,7 +21,7 @@ _log = logging.getLogger(__name__)
 
 
 if TYPE_CHECKING:
-    from .texture import TextureDetails
+    from .texture import Texture
 
 
 class Workplane(cq.Workplane):
@@ -35,11 +35,11 @@ class Workplane(cq.Workplane):
     ) -> Self:
         return cast(Self, teardrop.teardrop(self, radius, rotate, clip))
 
-    def texture(self, details: "TextureDetails", show_progress: bool = False) -> Self:
+    def texture(self, details: "Texture") -> Self:
         # Import here to avoid circular import
         from .texture import add_texture
 
-        return cast(Self, add_texture(self, details, show_progress))
+        return cast(Self, add_texture(self, details))
 
     def polar_move_to(self, phi: float, r: float, relative: bool = False) -> Self:
         # Convert polar coordinates to Cartesian

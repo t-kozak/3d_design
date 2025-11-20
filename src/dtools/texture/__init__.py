@@ -1,18 +1,11 @@
-from .tex_details import TextureDetails
-from .hex import HoneycombTexture, add_hex_texture_to_faces
-from typing import TYPE_CHECKING
+from ._add_texture import add_texture
+from .hex import HoneycombTexture
+from .linear import LinearTexture
+from .tex_details import Texture
 
-if TYPE_CHECKING:
-    from workplane import Workplane
-
-
-def add_texture(
-    workplane: "Workplane", details: TextureDetails, show_progress: bool = False
-) -> "Workplane":
-    if isinstance(details, HoneycombTexture):
-        return add_hex_texture_to_faces(workplane, details, show_progress)
-    else:
-        raise ValueError(f"Invalid texture type: {type(details)}")
-
-
-__all__ = ["TextureDetails", "HoneycombTexture", "add_hex_texture_to_faces"]
+__all__ = [
+    "add_texture",
+    "Texture",
+    "HoneycombTexture",
+    "LinearTexture",
+]
