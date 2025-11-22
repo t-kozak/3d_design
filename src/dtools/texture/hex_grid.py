@@ -40,7 +40,8 @@ class HexGridTexture(Texture):
         flat_width = d * math.sqrt(3) / 2
 
         # Spacing for the rectangular arrays
-        # We need large gaps in the individual arrays so the second array can fit in between
+        # We need large gaps in the individual arrays so the second array can fit in
+        # between
         x_spacing = d * 1.5
         y_spacing = flat_width
 
