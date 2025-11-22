@@ -34,6 +34,38 @@ class Texture(abc.ABC):
         # Create workplane from the plane
         return Workplane(plane)
 
+    def _wire_edge(self, face: Face, height: float, thickness: float) -> Workplane:
+        """Create an inward-facing wall along the face's wire boundary.
+
+        Args:
+            face: The face to create the wall for
+            height: The height of the wall extrusion
+            thickness: The thickness of the wall (inward from the wire)
+
+        Returns:
+            A workplane containing the wall geometry
+        """
+        # Get the outer wire of the face
+        outer_wire = face.outerWire()
+
+        # Create workplane aligned with the face
+        wp = self._wp_for_face(face)
+
+        # Create the outer boundary by extruding the wire
+        outer_solid = wp.add(outer_wire).toPending().extrude(height)
+
+        # Offset the wire inward by the thickness amount
+        # Negative offset creates an inward offset
+        inner_wire = outer_wire.offset2D(-thickness)
+
+        # Create the inner boundary
+        inner_solid = (
+            self._wp_for_face(face).add(inner_wire).toPending().extrude(height)
+        )
+
+        # Subtract the inner from the outer to create the wall
+        return outer_solid.cut(inner_solid)
+
     def _cut_to_face_boundary(
         self, face: Face, texture: Workplane, height: float
     ) -> Workplane:
