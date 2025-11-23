@@ -150,3 +150,8 @@ class Workplane(cq.Workplane):
         from dtools.primitives.geom import rrect
 
         return rrect(self, width, height, radius, center)
+
+    def move_center_to(self, loc: tuple[float, ...]) -> Self:
+        from .primitives.transforms import move_center_to
+
+        return cast(Self, move_center_to(self, loc))

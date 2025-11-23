@@ -51,44 +51,14 @@ class IPhoneDims:
     bottom_screw_radius: float = 1.5 / 2
     mic_radius: float = 1.35 / 2
 
-    def make_body(self, plane: str) -> Workplane:
-        bottom_left_points = list(self.corner_curve)
-        bottom_right_points: list[tuple[float, float]] = []
-        top_right_points: list[tuple[float, float]] = []
-        top_left_points: list[tuple[float, float]] = []
+    @property
+    def mid_point(self) -> tuple[float, float, float]:
+        return (self.width / 2, self.height / 2, self._mid_z)
 
-        for pt in reversed(self.corner_curve):
-            bottom_right_points.append((self.width - pt[0], pt[1]))
-
-        for pt in self.corner_curve:
-            top_right_points.append((self.width - pt[0], self.height - pt[1]))
-
-        for pt in reversed(self.corner_curve):
-            top_left_points.append((pt[0], self.height - pt[1]))
-
-        body = (
-            Workplane(plane)
-            .spline(bottom_left_points)
-            .lineTo(*bottom_right_points[0])
-            .spline(bottom_right_points)
-            .lineTo(*top_right_points[0])
-            .spline(top_right_points)
-            .lineTo(*top_left_points[0])
-            .spline(top_left_points)
-            .close()
-            .extrude(self.thickness)
-        )
+    def create(self, plane: str = "XY") -> Workplane:
+        body = self.get_body_outline(plane).extrude(self.thickness)
 
         body += self._make_cam_island(plane)
-
-        for cam_loc in self.back_cam_locations:
-            abs_loc = (cam_loc[0], self.height - cam_loc[1])
-            body += (
-                Workplane(plane)
-                .moveTo(*abs_loc)
-                .circle(self.back_cam_radius)
-                .extrude(-self.back_cam_to_glass_height)
-            )
 
         for loc in self.mic_locations:
             body -= (
@@ -148,6 +118,79 @@ class IPhoneDims:
 
         return body
 
+    def get_cam_island_center(
+        self,
+        scale_x: float = 1.0,
+        scale_y: float = 1.0,
+        offset: tuple[float, float] | None = None,
+    ) -> tuple[float, float]:
+        cfg = self.cam_island_cfg
+        abs_loc = (
+            avg(cfg.top_left_offset[0], cfg.base_size[0]) * scale_x,
+            (self.height - avg(cfg.top_left_offset[1], cfg.base_size[1])) * scale_y,
+        )
+        if offset is not None:
+            abs_loc = (
+                abs_loc[0] + offset[0],
+                abs_loc[1] + offset[1],
+            )
+
+        return abs_loc
+
+    def get_cam_island_base_outline(
+        self, plane: str = "XY", scale_x: float = 1.0, scale_y: float = 1.0
+    ) -> Workplane:
+        cfg = self.cam_island_cfg
+        abs_loc = (
+            avg(cfg.top_left_offset[0], cfg.base_size[0]) * scale_x,
+            (self.height - avg(cfg.top_left_offset[1], cfg.base_size[1])) * scale_y,
+        )
+        return (
+            Workplane(plane)
+            .moveTo(*abs_loc)
+            .rrect(
+                cfg.base_size[0] * scale_x,
+                cfg.base_size[1] * scale_y,
+                cfg.base_size[2],
+            )
+        )
+
+    def get_body_outline(
+        self, plane: str = "XY", scale_x: float = 1.0, scale_y: float = 1.0
+    ) -> Workplane:
+        bottom_left_points: list[tuple[float, float]] = []
+        bottom_right_points: list[tuple[float, float]] = []
+        top_right_points: list[tuple[float, float]] = []
+        top_left_points: list[tuple[float, float]] = []
+
+        for pt in self.corner_curve:
+            bottom_left_points.append((pt[0] * scale_x, pt[1] * scale_y))
+
+        for pt in reversed(self.corner_curve):
+            bottom_right_points.append(
+                ((self.width - pt[0]) * scale_x, pt[1] * scale_y)
+            )
+
+        for pt in self.corner_curve:
+            top_right_points.append(
+                ((self.width - pt[0]) * scale_x, (self.height - pt[1]) * scale_y)
+            )
+
+        for pt in reversed(self.corner_curve):
+            top_left_points.append((pt[0] * scale_x, (self.height - pt[1]) * scale_y))
+
+        return (
+            Workplane(plane)
+            .spline(bottom_left_points)
+            .lineTo(*bottom_right_points[0])
+            .spline(bottom_right_points)
+            .lineTo(*top_right_points[0])
+            .spline(top_right_points)
+            .lineTo(*top_left_points[0])
+            .spline(top_left_points)
+            .close()
+        )
+
     def _make_cam_island(self, plane: str) -> Workplane:
         cfg = self.cam_island_cfg
         abs_loc = (
@@ -158,6 +201,13 @@ class IPhoneDims:
             Workplane(plane)
             .moveTo(*abs_loc)
             .rrect(*cfg.base_size)
+            .workplane(offset=-cfg.base_to_island_plateau_height / 2)
+            .moveTo(*abs_loc)
+            .rrect(
+                cfg.plateau_size[0] * 1.05,
+                cfg.plateau_size[1] * 1.05,
+                cfg.plateau_size[2] * 1.05,
+            )
             .workplane(offset=-cfg.base_to_island_plateau_height)
             .moveTo(*abs_loc)
             .rrect(*cfg.plateau_size)
@@ -253,7 +303,7 @@ class IPhones:
 if __name__ == "__main__":
     from ocp_vscode import show
 
-    body = IPhones.IPHONE_16_PRO.make_body("XY")
+    body = IPhones.IPHONE_16_PRO.create("XY")
     # body = Workplane("XY").rrect(20, 50, 10).extrude(5)
     # body += Workplane("XY").moveTo(30, 30).rrect(20, 50, 10).extrude(5)
     show(body)
