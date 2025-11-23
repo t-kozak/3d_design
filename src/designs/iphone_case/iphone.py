@@ -13,6 +13,20 @@ class BtnConfig:
 
 
 @dataclass
+class CamIslandCfg:
+    # offset from top left edge of the phone to top left edge of the island base
+    top_left_offset: tuple[float, float]
+    # width, length, corner radius
+    base_size: tuple[float, float, float]
+    # width, length, corner radius
+    plateau_size: tuple[float, float, float]
+    cam_radius: float
+    base_to_cam_top_height: float
+    base_to_island_plateau_height: float
+    phone_top_left_edge_to_camera_offsets: list[tuple[float, float]]
+
+
+@dataclass
 class IPhoneDims:
     width: float
     height: float
@@ -26,6 +40,16 @@ class IPhoneDims:
 
     r_cam_island_base_top_left_offset: tuple[float, float]
     r_cam_island_size: tuple[float, float]
+
+    buttons_cfg: list[BtnConfig]
+
+    cam_island_cfg: CamIslandCfg
+
+    mic_locations: list[float]
+    bottom_screw_locations: list[float]
+    connector_size: tuple[float, float]
+    bottom_screw_radius: float = 1.5 / 2
+    mic_radius: float = 1.35 / 2
 
     def make_body(self, plane: str) -> Workplane:
         bottom_left_points = list(self.corner_curve)
@@ -55,22 +79,7 @@ class IPhoneDims:
             .extrude(self.thickness)
         )
 
-        cam_island_center = (
-            self.r_cam_island_base_top_left_offset[0] + (self.r_cam_island_size[0] / 2),
-            self.height
-            - self.r_cam_island_base_top_left_offset[1]
-            - (self.r_cam_island_size[1] / 2),
-        )
-
-        cam_island_base = (
-            Workplane(plane)
-            .moveTo(*cam_island_center)
-            .rect(*self.r_cam_island_size)
-            .extrude(-self.cam_island_thickness)
-            .edges("|Z")
-            .fillet(10)
-        )
-        body += cam_island_base
+        body += self._make_cam_island(plane)
 
         for cam_loc in self.back_cam_locations:
             abs_loc = (cam_loc[0], self.height - cam_loc[1])
@@ -81,48 +90,32 @@ class IPhoneDims:
                 .extrude(-self.back_cam_to_glass_height)
             )
 
-        mic_locations = [19.7, 0, 24.21, 47.23, 0, 0, 0, 56.25]
-        mic_locations[1] = avg(mic_locations[0], mic_locations[2])
-        mic_locations[5] = avg(mic_locations[3], mic_locations[7])
-        mic_locations[4] = avg(mic_locations[3], mic_locations[5])
-        mic_locations[6] = avg(mic_locations[7], mic_locations[5])
+        for loc in self.mic_locations:
+            body -= (
+                Workplane("XZ")
+                .moveTo(loc, self._mid_z)
+                .circle(self.mic_radius)
+                .extrude(-2)
+            )
 
-        for loc in mic_locations:
-            body -= Workplane("XZ").moveTo(loc, 4.12).circle(1.35 / 2).extrude(-2)
-
-        screw_locs = [28.79, 42.64]
-        for loc in screw_locs:
-            body -= Workplane("XZ").moveTo(loc, 4.12).circle(1.5 / 2).extrude(-2)
-
-        usb_c_loc_start = 30.86
-        usb_c_loc_end = 40.58
-        usb_c_size = (usb_c_loc_end - usb_c_loc_start, 3.1)
+        for loc in self.bottom_screw_locations:
+            body -= (
+                Workplane("XZ")
+                .moveTo(loc, self._mid_z)
+                .circle(self.bottom_screw_radius)
+                .extrude(-2)
+            )
 
         body -= (
             Workplane("XZ")
-            .moveTo(avg(usb_c_loc_start, usb_c_loc_end), 4.12)
-            .rect(*usb_c_size)
+            .moveTo(self.width / 2, self._mid_z)
+            .rect(*self.connector_size)
             .extrude(-4)
             .edges("|Y")
-            .fillet(usb_c_size[1] / 2.1)
+            .fillet(self.connector_size[1] / 2.01)
         )
 
-        buttons_cfg: list[BtnConfig] = [
-            BtnConfig(
-                left=True, length=3.45 * 2, width=2.66, height=0.45, top_offset=34.08
-            ),
-            BtnConfig(
-                left=True, length=5.6 * 2, width=2.66, height=0.45, top_offset=48.23
-            ),
-            BtnConfig(
-                left=True, length=5.6 * 2, width=2.66, height=0.45, top_offset=62.43
-            ),
-            BtnConfig(
-                left=False, length=8.85 * 2, width=2.66, height=0.45, top_offset=55.33
-            ),
-        ]
-
-        for btn in buttons_cfg:
+        for btn in self.buttons_cfg:
             if btn.left:
                 extr_multi = -1
                 offset = 0
@@ -155,9 +148,49 @@ class IPhoneDims:
 
         return body
 
+    def _make_cam_island(self, plane: str) -> Workplane:
+        cfg = self.cam_island_cfg
+        abs_loc = (
+            avg(cfg.top_left_offset[0], cfg.base_size[0]),
+            self.height - avg(cfg.top_left_offset[1], cfg.base_size[1]),
+        )
+        island = (
+            Workplane(plane)
+            .moveTo(*abs_loc)
+            .rrect(*cfg.base_size)
+            .workplane(offset=-cfg.base_to_island_plateau_height)
+            .moveTo(*abs_loc)
+            .rrect(*cfg.plateau_size)
+            .loft()
+        )
+
+        for cam_loc in cfg.phone_top_left_edge_to_camera_offsets:
+            abs_loc = (cam_loc[0], self.height - cam_loc[1])
+            island += (
+                Workplane(plane)
+                .moveTo(*abs_loc)
+                .circle(self.back_cam_radius)
+                .extrude(-self.back_cam_to_glass_height)
+            )
+
+        return island
+
+    @property
+    def _mid_z(self) -> float:
+        return self.thickness / 2
+
 
 def avg(a: float, b: float) -> float:
     return (a + b) / 2
+
+
+def _get_16_pro_mic_locs() -> list[float]:
+    mic_locations = [19.7, 0, 24.21, 47.23, 0, 0, 0, 56.25]
+    mic_locations[1] = avg(mic_locations[0], mic_locations[2])
+    mic_locations[5] = avg(mic_locations[3], mic_locations[7])
+    mic_locations[4] = avg(mic_locations[3], mic_locations[5])
+    mic_locations[6] = avg(mic_locations[7], mic_locations[5])
+    return mic_locations
 
 
 class IPhones:
@@ -184,6 +217,36 @@ class IPhones:
         back_cam_to_glass_height=4.28,
         r_cam_island_base_top_left_offset=(1.04, 1.04),
         r_cam_island_size=(45.22 - 1.04, 46.54 - 1.04),
+        buttons_cfg=[
+            BtnConfig(
+                left=True, length=3.45 * 2, width=2.66, height=0.45, top_offset=34.08
+            ),
+            BtnConfig(
+                left=True, length=5.6 * 2, width=2.66, height=0.45, top_offset=48.23
+            ),
+            BtnConfig(
+                left=True, length=5.6 * 2, width=2.66, height=0.45, top_offset=62.43
+            ),
+            BtnConfig(
+                left=False, length=8.85 * 2, width=2.66, height=0.45, top_offset=55.33
+            ),
+        ],
+        mic_locations=_get_16_pro_mic_locs(),
+        bottom_screw_locations=[28.79, 42.64],
+        connector_size=(30.86 - 40.58, 3.1),
+        cam_island_cfg=CamIslandCfg(
+            top_left_offset=(1.04, 1.04),
+            base_size=(45.22 - 1.04, 46.54 - 1.04, 12.0),
+            plateau_size=(41.56 - 4.70, 42.88 - 4.70, 10.0),
+            base_to_island_plateau_height=2.05,
+            base_to_cam_top_height=4.28,
+            cam_radius=14.17,
+            phone_top_left_edge_to_camera_offsets=[
+                (14.17, 14.17),
+                (14.17, 33.41),
+                (32.16, 23.79),
+            ],
+        ),
     )
 
 
@@ -191,4 +254,6 @@ if __name__ == "__main__":
     from ocp_vscode import show
 
     body = IPhones.IPHONE_16_PRO.make_body("XY")
+    # body = Workplane("XY").rrect(20, 50, 10).extrude(5)
+    # body += Workplane("XY").moveTo(30, 30).rrect(20, 50, 10).extrude(5)
     show(body)

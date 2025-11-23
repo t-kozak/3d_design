@@ -145,3 +145,8 @@ class Workplane(cq.Workplane):
         if isinstance(fname, Path):
             fname = str(fname)
         return super().export(fname, tolerance, angularTolerance, opt)
+
+    def rrect(self, width: float, height: float, radius: float, center: bool = True):
+        from dtools.primitives.geom import rrect
+
+        return rrect(self, width, height, radius, center)
