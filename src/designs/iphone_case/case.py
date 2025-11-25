@@ -7,26 +7,42 @@ from dtools.texture.hex_grid import HexGridTexture
 from dtools.texture.linear import LinearTexture
 from dtools.workplane import Workplane
 
+# TODO:
+# - add carving out a space for screen protector
+# - increase the phone_hole to take into account the back skin protector
+# - cut out channels for the string
+# - chop the thing into 2 pieces
+# - change the buttons to be invisible
+
 
 def _create_phone_mould(iphone: IPhoneDims) -> tuple[Workplane, BoundBox]:
-    phone_hole = iphone.get_body_outline().extrude(iphone_dims.thickness * 1.01)
-    phone_outer_hole = iphone.get_body_outline(scale_x=0.93, scale_y=0.97).extrude(
-        iphone_dims.thickness * 5
+    screen_protector_height = 0.8
+    back_skin_height = 0.2
+
+    phone_hole = iphone.get_body_outline().extrude(
+        iphone_dims.thickness + back_skin_height + 0.2  # .2 for tolerance
     )
-    phone_hole, phone_outer_hole = align(
-        phone_hole, phone_outer_hole, alignments=("center", "center", "start")
+    touch_area_hole = iphone.get_body_outline(scale_x=0.93, scale_y=0.97).extrude(
+        iphone_dims.thickness * 1.5
     )
-    phone_hole = phone_hole.translate((0, 0, 3))
-    phone_outer_hole = phone_outer_hole.translate((0, 0, 3))
+    phone_hole_b_box = phone_hole.get_bbox()
+    screen_protector_hole = iphone.get_body_outline(scale_x=0.98, scale_y=0.99).extrude(
+        phone_hole_b_box.zlen + screen_protector_height
+    )
+    phone_hole, touch_area_hole, screen_protector_hole = align(
+        phone_hole,
+        touch_area_hole,
+        screen_protector_hole,
+        alignments=("center", "center", "start"),
+    )
+
+    cut_out_body = phone_hole + screen_protector_hole + touch_area_hole
 
     phone_hole_b_box = phone_hole.get_bbox()
-
-    cut_out_body = phone_hole + phone_outer_hole
-
     for btn in iphone_dims.buttons_cfg:
         origin_x = 0
         origin_y = phone_hole_b_box.ymax - btn.top_offset
-        origin_z = phone_hole_b_box.center.z + 1.35  # no idea why
+        origin_z = phone_hole_b_box.center.z + 1.2  # no idea
         if btn.left:
             origin_x = phone_hole_b_box.xmin
             normal = (-1, 0, 0)
@@ -86,9 +102,22 @@ def _apply_camera_island(
     return body
 
 
-def create_iphone_case(iphone: IPhoneDims) -> Workplane:
-    back_wall_thickness = 3.0
+def _apply_string_channels(case: Workplane) -> Workplane:
+    bbox = case.get_bbox()
+    wp = (
+        Workplane(Plane.XZ(origin=(bbox.center.x, bbox.ymax, bbox.center.z)))
+        .rarray(xSpacing=bbox.xlen * 0.95, ySpacing=10.0, xCount=2, yCount=2)
+        .teardrop(radius=1.0)
+        .extrude(bbox.ylen * 1.2)
+        # .rarray(xSpacing=bbox.xlen * 0.955, ySpacing=1, xCount=2, yCount=1)
+        # .teardrop(radius=1.5)
+        # .extrude(3)
+    )
+    return case - wp
 
+
+def create_iphone_case(iphone: IPhoneDims) -> Workplane:
+    back_wall_thickness = iphone.cam_island_cfg.base_to_cam_top_height
     mould, phone_hole_b_box = _create_phone_mould(iphone)
     # Create main body
     body = (
@@ -100,11 +129,15 @@ def create_iphone_case(iphone: IPhoneDims) -> Workplane:
                 hex_diameter=10.0,
                 hex_height=back_wall_thickness,
                 side_thickness=2,
-                solid_edge=True,
-            )
+                edge_width=6.0,
+            ),
+            cache_key="iphone_case_hex_tex_v4",
         )
         .faces(">Z")
-        .texture(LinearTexture(height=1))
+        .texture(
+            LinearTexture(height=1),
+            cache_key="iphone_case_linear_tex_v1",
+        )
         .translate((0, 0, back_wall_thickness))
     )
 
@@ -149,6 +182,7 @@ def create_iphone_case(iphone: IPhoneDims) -> Workplane:
     body -= ports_mics_cutout
     body -= speaker_cutout
 
+    body = _apply_string_channels(body)
     return body
 
 
@@ -157,7 +191,8 @@ def create_iphone_case(iphone: IPhoneDims) -> Workplane:
 #     bbox = main_body.get_bbox()
 #     hole_dims = (bbox.xlen * 0.85, bbox.ylen * 0.9)
 #     hole = Workplane("XY").rect(*hole_dims).extrude(iphone.thickness)
-#     main_body, hole = align(main_body, hole, alignments=("center", "center", "center"))
+#     main_body, hole = align(main_body, hole,
+#           alignments=("center", "center", "center"))
 #     main_body -= hole
 #     return main_body
 
@@ -170,20 +205,12 @@ if __name__ == "__main__":
 
     # frame = create_iphone_support_frame(iphone_dims)
     i_case = create_iphone_case(iphone_dims)
-
     phone = iphone_dims.create()
-
-    # Calculate centers for alignment
-    phone_center = phone.get_center()
-    case_center = i_case.get_center()
-
-    # Z offset: phone 20mm above the case
-    z_offset = 20
 
     ass = Assembly()
 
     i_case, phone = align(i_case, phone, alignments=("center", "center", "start"))
-    # phone = phone.translate((0, 0, 3))
+
     ass.add(i_case, color=Color("black"), name="case")
     ass.add(
         phone,

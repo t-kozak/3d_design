@@ -28,7 +28,8 @@ class HexGridTexture(Texture):
     hex_diameter: float
     hex_height: float
     side_thickness: float
-    solid_edge: bool = True
+
+    edge_width: float | None = None
 
     @override
     def _create_for_face(self, face: Face) -> Workplane:
@@ -94,8 +95,8 @@ class HexGridTexture(Texture):
         texture = (hex1 - holes1) + (hex2 - holes2)
         texture = self._cut_to_face_boundary(face, texture, self.hex_height)
 
-        if self.solid_edge:
-            texture += self._wire_edge(face, self.hex_height, self.side_thickness)
+        if self.edge_width is not None:
+            texture += self._wire_edge(face, self.hex_height, self.edge_width)
         return texture
 
 
