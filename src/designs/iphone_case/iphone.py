@@ -48,8 +48,11 @@ class IPhoneDims:
     mic_locations: list[float]
     bottom_screw_locations: list[float]
     connector_size: tuple[float, float]
+    top_receiver_size: tuple[float, float]
     bottom_screw_radius: float = 1.5 / 2
     mic_radius: float = 1.35 / 2
+
+    screen_protector_height: float | None = 0.6
 
     @property
     def mid_point(self) -> tuple[float, float, float]:
@@ -57,6 +60,13 @@ class IPhoneDims:
 
     def create(self, plane: str = "XY") -> Workplane:
         body = self.get_body_outline(plane).extrude(self.thickness)
+        if self.screen_protector_height:
+            scr_prt = (
+                self.get_body_outline(plane, width=67.4, height=145.5)
+                .extrude(self.thickness + self.screen_protector_height)
+                .aligned(body, ("center", "center", "start"))
+            )
+            body += scr_prt
 
         body += self._make_cam_island(plane)
 
@@ -104,7 +114,7 @@ class IPhoneDims:
             )
             body += wp
 
-        top_receiver_size = (14.41, 0.85)
+        top_receiver_size = self.top_receiver_size
         top_receiver = (
             Workplane("XY")
             .workplane(offset=self.thickness)
@@ -117,25 +127,6 @@ class IPhoneDims:
         body -= top_receiver
 
         return body
-
-    def get_cam_island_center(
-        self,
-        scale_x: float = 1.0,
-        scale_y: float = 1.0,
-        offset: tuple[float, float] | None = None,
-    ) -> tuple[float, float]:
-        cfg = self.cam_island_cfg
-        abs_loc = (
-            avg(cfg.top_left_offset[0], cfg.base_size[0]) * scale_x,
-            (self.height - avg(cfg.top_left_offset[1], cfg.base_size[1])) * scale_y,
-        )
-        if offset is not None:
-            abs_loc = (
-                abs_loc[0] + offset[0],
-                abs_loc[1] + offset[1],
-            )
-
-        return abs_loc
 
     def get_cam_island_base_outline(
         self, plane: str = "XY", scale_x: float = 1.0, scale_y: float = 1.0
@@ -156,28 +147,34 @@ class IPhoneDims:
         )
 
     def get_body_outline(
-        self, plane: str = "XY", scale_x: float = 1.0, scale_y: float = 1.0
+        self,
+        plane: str = "XY",
+        scale_x: float = 1.0,
+        scale_y: float = 1.0,
+        width: float | None = None,
+        height: float | None = None,
     ) -> Workplane:
         bottom_left_points: list[tuple[float, float]] = []
         bottom_right_points: list[tuple[float, float]] = []
         top_right_points: list[tuple[float, float]] = []
         top_left_points: list[tuple[float, float]] = []
 
+        width = width or self.width
+        height = height or self.height
+
         for pt in self.corner_curve:
             bottom_left_points.append((pt[0] * scale_x, pt[1] * scale_y))
 
         for pt in reversed(self.corner_curve):
-            bottom_right_points.append(
-                ((self.width - pt[0]) * scale_x, pt[1] * scale_y)
-            )
+            bottom_right_points.append(((width - pt[0]) * scale_x, pt[1] * scale_y))
 
         for pt in self.corner_curve:
             top_right_points.append(
-                ((self.width - pt[0]) * scale_x, (self.height - pt[1]) * scale_y)
+                ((width - pt[0]) * scale_x, (height - pt[1]) * scale_y)
             )
 
         for pt in reversed(self.corner_curve):
-            top_left_points.append((pt[0] * scale_x, (self.height - pt[1]) * scale_y))
+            top_left_points.append((pt[0] * scale_x, (height - pt[1]) * scale_y))
 
         return (
             Workplane(plane)
@@ -194,7 +191,7 @@ class IPhoneDims:
     def _make_cam_island(self, plane: str) -> Workplane:
         cfg = self.cam_island_cfg
         abs_loc = (
-            avg(cfg.top_left_offset[0], cfg.base_size[0]),
+            self.width - avg(cfg.top_left_offset[0], cfg.base_size[0]),
             self.height - avg(cfg.top_left_offset[1], cfg.base_size[1]),
         )
         island = (
@@ -215,7 +212,7 @@ class IPhoneDims:
         )
 
         for cam_loc in cfg.phone_top_left_edge_to_camera_offsets:
-            abs_loc = (cam_loc[0], self.height - cam_loc[1])
+            abs_loc = (self.width - cam_loc[0], self.height - cam_loc[1])
             island += (
                 Workplane(plane)
                 .moveTo(*abs_loc)
@@ -297,6 +294,7 @@ class IPhones:
                 (32.16, 23.79),
             ],
         ),
+        top_receiver_size=(14.41, 0.85),
     )
 
 

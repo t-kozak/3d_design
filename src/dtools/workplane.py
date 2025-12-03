@@ -16,6 +16,9 @@ from typing import (
 import cadquery as cq
 
 from . import parabolic, teardrop
+from .primitives.transforms import Alignment, align, align_to
+
+__all__ = ["align"]
 
 _log = logging.getLogger(__name__)
 
@@ -26,6 +29,7 @@ if TYPE_CHECKING:
 
 class Workplane(cq.Workplane):
     auto_clean: bool = True
+    build_dir: str | Path | None = None
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -142,8 +146,13 @@ class Workplane(cq.Workplane):
         angularTolerance: float = 0.1,
         opt: Optional[Dict[str, Any]] = None,
     ) -> Self:
-        if isinstance(fname, Path):
-            fname = str(fname)
+        fname = Path(fname)
+        if self.build_dir is not None:
+            if isinstance(self.build_dir, str):
+                self.build_dir = Path(self.build_dir)
+            fname = self.build_dir / fname
+        fname.parent.mkdir(parents=True, exist_ok=True)
+        fname = str(fname)
         return super().export(fname, tolerance, angularTolerance, opt)
 
     def rrect(self, width: float, height: float, radius: float, center: bool = True):
@@ -155,3 +164,8 @@ class Workplane(cq.Workplane):
         from .primitives.transforms import move_center_to
 
         return cast(Self, move_center_to(self, loc))
+
+    def aligned(
+        self, other: Self, alignment: tuple[Alignment, Alignment, Alignment]
+    ) -> Self:
+        return cast(Self, align_to(self, other, alignment))

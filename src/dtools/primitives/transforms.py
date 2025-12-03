@@ -130,3 +130,67 @@ def move_center_to(workplane: "Workplane", loc: tuple[float, ...]) -> "Workplane
         dz = loc[2] - current_z
 
     return workplane.translate((dx, dy, dz))
+
+
+def align_to(
+    wp: "Workplane",
+    location_src: "Workplane",
+    alignment: tuple[
+        Alignment | None,
+        Alignment | None,
+        Alignment | None,
+    ],
+) -> "Workplane":
+    """
+    Align a Workplane to match another Workplane's geometry based on
+    alignment type for each axis.
+
+    Args:
+        wp: The Workplane to align
+        location_src: The reference Workplane to align to
+        alignment: Tuple of alignment types for (X, Y, Z) axes.
+                   - "start": Align to minimum bounding box value
+                   - "center": Align to center of bounding box
+                   - "end": Align to maximum bounding box value
+                   - None: No alignment on this axis
+
+    Returns:
+        Aligned Workplane object
+
+    Example:
+        aligned = align_to(wp, reference, alignment=("center", "start", None))
+    """
+    wp_bbox = wp.get_bbox()
+    src_bbox = location_src.get_bbox()
+
+    dx, dy, dz = 0.0, 0.0, 0.0
+
+    # Calculate translation for X axis
+    if alignment[0] is not None:
+        if alignment[0] == "start":
+            dx = src_bbox.xmin - wp_bbox.xmin
+        elif alignment[0] == "end":
+            dx = src_bbox.xmax - wp_bbox.xmax
+        elif alignment[0] == "center":
+            dx = src_bbox.center.x - wp_bbox.center.x
+
+    # Calculate translation for Y axis
+    if alignment[1] is not None:
+        if alignment[1] == "start":
+            dy = src_bbox.ymin - wp_bbox.ymin
+        elif alignment[1] == "end":
+            dy = src_bbox.ymax - wp_bbox.ymax
+        elif alignment[1] == "center":
+            dy = src_bbox.center.y - wp_bbox.center.y
+
+    # Calculate translation for Z axis
+    if alignment[2] is not None:
+        if alignment[2] == "start":
+            dz = src_bbox.zmin - wp_bbox.zmin
+        elif alignment[2] == "end":
+            dz = src_bbox.zmax - wp_bbox.zmax
+        elif alignment[2] == "center":
+            dz = src_bbox.center.z - wp_bbox.center.z
+
+    # Apply translation
+    return wp.translate((dx, dy, dz))
