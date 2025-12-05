@@ -169,3 +169,33 @@ class Workplane(cq.Workplane):
         self, other: Self, alignment: tuple[Alignment, Alignment, Alignment]
     ) -> Self:
         return cast(Self, align_to(self, other, alignment))
+
+    def svg_icon(
+        self: Self,
+        svg: str | Path,
+        height: float = 4,
+        smooth: bool = True,
+        x_len: float | None = None,
+        y_len: float | None = None,
+        center: bool = True,
+        chamfer: float | None = None,
+        chamfer_top: float | None = None,
+        chamfer_bottom: float | None = None,
+    ) -> Self:
+        from dtools.svg import svg_icon
+
+        return cast(
+            Self,
+            svg_icon(
+                self,
+                svg,
+                height,
+                smooth,
+                x_len,
+                y_len,
+                center,
+                chamfer,
+                chamfer_top,
+                chamfer_bottom,
+            ),
+        )

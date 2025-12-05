@@ -44,9 +44,9 @@ def make_coin_envelope(diameter: float, height: float) -> Workplane:
 
 def _make_baton(diameter: float, height: float):
     env_x, env_y, env_z = _get_coin_envelope_dims(diameter, height)
-    wall_thickness_xy = 2
-    wall_thickness_z = 1.2
-    gap_thickness = 0.4
+    wall_thickness_xy = 2.6
+    wall_thickness_z = 1.4
+    gap_thickness = 0.6
 
     baton = (
         Workplane("XY")
@@ -60,8 +60,8 @@ def _make_baton(diameter: float, height: float):
 
     envelope_space = (
         Workplane("XY")
-        .rect(env_x + 0.2, env_y + 0.2)
-        .extrude(env_z + 0.2)
+        .rect(env_x + 0.4, env_y + 0.4)
+        .extrude(env_z + 0.4)
         .aligned(baton, ("start", "center", "start"))
         .translate((wall_thickness_xy, 0, wall_thickness_z))
     )
@@ -72,38 +72,28 @@ def _make_baton(diameter: float, height: float):
         .extrude(wall_thickness_z + env_z / 2)
         .aligned(baton, ("center", "center", "start"))
     )
+
+    baton += (
+        _make_arrow(True)
+        .aligned(baton, ("center", "end", "center"))
+        .translate((0, 20, 0))
+    )
+    baton += _make_arrow(True)
+    baton += _make_arrow(True).translate((0, 0, 5))
+
     baton = baton - gap - envelope_space
 
     return baton
 
 
-def _make_diagonal_support_fins(
-    bbox, support_height: float, support_length: float, fin_thickness: float
-):
-    """Create diagonal support fins extending at 45 degrees from both sides"""
-    # Left support fin - triangular, extends down-left at 45 degrees
-    support_left = (
+def _make_arrow(left: bool = True) -> Workplane:
+    return (
         Workplane("XY")
-        .moveTo(bbox.xmin, bbox.ymin)
-        .lineTo(bbox.xmin - support_length, bbox.ymin - support_length)
-        .lineTo(bbox.xmin - support_length, bbox.ymin - support_length + fin_thickness)
-        .lineTo(bbox.xmin, bbox.ymin + fin_thickness)
-        .close()
-        .extrude(support_height)
+        .svg_icon("images/arrow.svg", x_len=5.0, chamfer_bottom=2.0, height=0.6)
+        .rotate_center("Y", 90)
+        .rotate_center("Z", 90)
+        .rotate_center("X", 90)
     )
-
-    # Right support fin - triangular, extends down-right at 45 degrees
-    support_right = (
-        Workplane("XY")
-        .moveTo(bbox.xmax, bbox.ymin)
-        .lineTo(bbox.xmax + support_length, bbox.ymin - support_length)
-        .lineTo(bbox.xmax + support_length, bbox.ymin - support_length + fin_thickness)
-        .lineTo(bbox.xmax, bbox.ymin + fin_thickness)
-        .close()
-        .extrude(support_height)
-    )
-
-    return support_left + support_right
 
 
 def _make_parallel_support_fins(

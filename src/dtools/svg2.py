@@ -5,9 +5,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Tuple
 
 import svgpathtools as svgt
+from cadquery import Plane, Sketch
 
 if TYPE_CHECKING:
     from dtools.workplane import Workplane
+
+import logging
+
+_log = logging.getLogger(__name__)
 
 
 class _PathType(Enum):
@@ -53,6 +58,7 @@ def svg_icon(
     Raises:
         ValueError: If both or neither of x_len/y_len are provided
     """
+
     # Validate dimensions
     if (x_len is None and y_len is None) or (x_len is not None and y_len is not None):
         raise ValueError("Exactly one of x_len or y_len must be provided")
@@ -69,12 +75,26 @@ def svg_icon(
     svg_height = bbox[3] - bbox[1]
     scale = _calculate_scale(svg_width, svg_height, x_len, y_len)
 
+    # Check if any paths are stroke paths and if chamfer is requested
+    # has_chamfer = (
+    #     chamfer is not None or chamfer_top is not None or chamfer_bottom is not None
+    # )
+    # if has_chamfer:
+    #     # Check if any path is a stroke path (not filled)
+    #     for attrs in attributes:
+    #         if not _has_fill(attrs, attrs):
+    #             raise NotImplementedError(
+    #                 "Chamfering stroke paths is not yet supported. "
+    #                 "Only filled paths can be chamfered."
+    #             )
+
     # Process each path individually
+    # Note: We don't merge parent SVG attributes because we only care about geometry,
+    # not presentation (colors). If fill/stroke isn't explicit on the path, we'll
+    # make a decision based on the path itself.
     solids = []
     for path, attrs in zip(paths, attributes, strict=True):
-        # Inherit SVG-level attributes for paths that don't have their own
-        merged_attrs = _merge_svg_attrs(attrs, svg_attrs)
-        solid = _process_path(path, merged_attrs, bbox, scale, height, smooth, center)
+        solid = _process_path(path, attrs, bbox, scale, height, smooth, center)
         if solid is not None:
             solids.append(solid)
 
@@ -95,7 +115,7 @@ def svg_icon(
                 )
                 processed_solids.append(solid)
             except Exception as e:
-                print(f"[solid {i}] Chamfer failed: {e}, using unchamfered solid")
+                _log.info(f"[solid {i}] Chamfer failed: {e}, using unchamfered solid")
                 processed_solids.append(solid)
         solids = processed_solids
 
@@ -126,7 +146,7 @@ def _safe_chamfer(
         Chamfered workplane (or original if all strategies fail)
     """
     result = solid
-
+    _log.info("Trying to chamfer")
     # Strategy 1: Try chamfering top and bottom edges separately
     try:
         if chamfer_top is not None:
@@ -134,8 +154,8 @@ def _safe_chamfer(
         if chamfer_bottom is not None:
             result = result.edges("<Z").chamfer(chamfer_bottom)
         return result
-    except Exception:
-        pass
+    except Exception as e:
+        _log.info(f"Strat 1 failed due to {e}")
 
     # Strategy 2: Try chamfering edges one at a time
     try:
@@ -165,8 +185,8 @@ def _safe_chamfer(
                     continue  # Skip problematic edges
 
         return result
-    except Exception:
-        pass
+    except Exception as e:
+        _log.info(f"Strat 2 failed due to {e}")
 
     # Strategy 3: Try with smaller chamfer sizes
     try:
@@ -178,10 +198,10 @@ def _safe_chamfer(
             smaller_bottom = chamfer_bottom * 0.5
             result = result.edges("<Z").chamfer(smaller_bottom)
         return result
-    except Exception:
-        pass
+    except Exception as e:
+        _log.info(f"Strat 3 failed due to {e}")
 
-    print(
+    _log.info(
         f"[solid {solid_id}] All chamfer strategies failed, returning unchamfered solid"
     )
     return solid
@@ -434,34 +454,44 @@ def _transform_point(
     return (x_final, y_final)
 
 
-def _has_fill(attributes: dict[str, Any]) -> bool:
+def _has_fill(path_attrs: dict[str, Any], merged_attrs: dict[str, Any]) -> bool:
     """
-    Check if path has a fill attribute.
+    Check if path should be rendered as filled vs stroked.
+
+    The key insight: we need to know if fill/stroke were explicitly set on the
+    path element, vs inherited from parent. If neither is explicit, treat as stroke.
 
     Args:
-        attributes: SVG attributes dictionary
+        path_attrs: Original path attributes (before merging with parent)
+        merged_attrs: Merged attributes (after inheriting from parent SVG)
 
     Returns:
-        True if path should be filled
+        True if path should be filled, False if it should be stroked
     """
-    fill = attributes.get("fill", "")
-    stroke = attributes.get("stroke", "")
+    # Check what was explicitly set on the path element itself
+    path_fill = path_attrs.get("fill", None)
+    path_stroke = path_attrs.get("stroke", None)
 
-    # If fill is explicitly "none", it's not filled
-    if fill == "none":
+    # Explicit fill="none" on path means stroke-only
+    if path_fill == "none":
         return False
 
-    # If there's an explicit fill value (not empty), it's filled
-    if fill and fill != "":
+    # Explicit stroke on path means stroke path
+    if path_stroke is not None and path_stroke != "none" and path_stroke != "":
+        return False
+
+    # Explicit fill on path (not inherited) means filled
+    if path_fill is not None and path_fill != "none" and path_fill != "":
         return True
 
-    # If there's no fill but there's a stroke, it's stroke-only
-    if stroke and stroke != "none" and stroke != "":
+    # If neither fill nor stroke is explicit on the path element,
+    # treat as stroke (outline) path - this handles cases like the turnip
+    # where fill is only set at the SVG level for color, not intent
+    if path_fill is None and path_stroke is None:
         return False
 
-    # Default SVG behavior: if nothing is specified, paths are filled with black
-    # But if stroke is specified without fill, treat as stroke-only
-    return fill != ""
+    # Default: treat as stroke
+    return False
 
 
 def _extract_stroke_width(attributes: dict[str, Any], scale: float) -> float:
@@ -514,12 +544,12 @@ def _determine_path_type(path: svgt.Path, attributes: dict[str, Any]) -> _PathTy
 
     Args:
         path: svgpathtools Path object
-        attributes: SVG attributes dictionary
+        attributes: SVG attributes dictionary (path element only, no inheritance)
 
     Returns:
         PathType enum indicating how to render this path
     """
-    has_fill = _has_fill(attributes)
+    has_fill = _has_fill(attributes, attributes)
 
     # Try to check if path is closed
     # Some paths (with discontinuous segments) will raise AssertionError
@@ -701,50 +731,55 @@ def _process_filled_path(
     return wire_wp.close().extrude(height)
 
 
-def _process_closed_stroke_path(
+def _process_stroke_path(
     wire_wp: "Workplane",
     height: float,
     stroke_width: float,
 ) -> "Workplane":
     """
-    Process a closed stroke path by creating a hollow shell.
+    Process a stroke path by sweeping a rectangular cross-section along the wire.
+
+    This creates a hollow outline by sweeping a rectangle along the path, avoiding
+    the issue where offset2D fills closed loops inside the path.
 
     Args:
-        wire_wp: Workplane containing the closed wire
-        height: Extrusion height in mm
-        stroke_width: Thickness of the stroke in mm
+        wire_wp: Workplane containing the wire to stroke
+        height: Height of the stroke in mm (Z direction)
+        stroke_width: Width of the stroke in mm (perpendicular to path)
 
     Returns:
-        Workplane with hollow extruded solid
+        Workplane with swept hollow outline solid
     """
-    # Extrude as solid, then shell to create hollow wire
-    solid = wire_wp.close().extrude(height)
-    # Shell the top and bottom faces to hollow it out
-    # Negative value shells inward, creating wall thickness
-    # return solid
-    return solid.faces(">Z or <Z").shell(stroke_width)
 
+    from dtools.workplane import Workplane
 
-def _process_open_stroke_path(
-    wire_wp: "Workplane",
-    height: float,
-    stroke_width: float,
-) -> "Workplane":
-    """
-    Process an open stroke path by offsetting and shelling.
+    _log.info("Processing stroke path")
 
-    Args:
-        wire_wp: Workplane containing the open wire
-        height: Extrusion height in mm
-        stroke_width: Thickness of the stroke in mm
+    # Get the wire from the workplane
+    wire = wire_wp.val()
 
-    Returns:
-        Workplane with extruded stroke
-    """
-    # Close it first using offset2D, then use shell
-    wire_wp = wire_wp.close().offset2D(stroke_width / 2)
-    solid = wire_wp.extrude(height)
-    return solid
+    # Get the first point and tangent
+    first_point = wire.startPoint()  # type: ignore[attr-defined]
+    tangent = wire.tangentAt(0)  # type: ignore[attr-defined]
+
+    _log.info(f"First point: ({first_point.x}, {first_point.y}, {first_point.z})")
+    _log.info(f"Tangent: ({tangent.x}, {tangent.y}, {tangent.z})")
+
+    # Create a rectangular cross-section on the perpendicular plane
+    # - stroke_width wide (perpendicular to the path direction)
+    # - height tall (in Z direction)
+
+    cs_sketch = Sketch().rect(stroke_width, height)
+
+    result = (
+        Workplane(
+            Plane(origin=(first_point.x, first_point.y, first_point.z), normal=tangent)
+        )
+        .placeSketch(cs_sketch)
+        .sweep(wire_wp)
+    )
+
+    return result
 
 
 def _process_path(
@@ -786,7 +821,7 @@ def _process_path(
         is_closed = "N/A (discontinuous)"
         is_continuous = False
 
-    print(
+    _log.info(
         f"[{element_id}] closed={is_closed}, continuous={is_continuous}, "
         f"type={path_type.value}, stroke_width={stroke_width:.2f}"
     )
@@ -794,7 +829,7 @@ def _process_path(
     # Handle discontinuous paths by splitting them
     if not is_continuous:
         sub_paths = _split_discontinuous_path(path)
-        print(f"[{element_id}] Split into {len(sub_paths)} sub-paths")
+        _log.info(f"[{element_id}] Split into {len(sub_paths)} sub-paths")
 
         # Process each sub-path and union them
         solids = []
@@ -820,49 +855,69 @@ def _process_path(
     wire_wp = _path_to_wire(path, bbox, scale, smooth, center)
 
     if wire_wp is None:
-        print(f"[{element_id}] Skipping: wire_wp is None")
+        _log.info(f"[{element_id}] Skipping: wire_wp is None")
         return None
 
     # Create solid based on path type
     try:
         if path_type == _PathType.FILLED:
             solid = _process_filled_path(wire_wp, height)
-        elif path_type == _PathType.CLOSED_STROKE:
-            solid = _process_closed_stroke_path(wire_wp, height, stroke_width)
-        else:  # PathType.OPEN_STROKE
-            solid = _process_open_stroke_path(wire_wp, height, stroke_width)
+        else:  # Both CLOSED_STROKE and OPEN_STROKE use the same sweep approach
+            solid = _process_stroke_path(wire_wp, height, stroke_width)
 
-        print(f"[{element_id}] Successfully created solid")
+        _log.info(f"[{element_id}] Successfully created solid")
         return solid
 
     except Exception:
         # Skip paths that can't be extruded
-        print(f"[{element_id}] ERROR:")
-        print(traceback.format_exc())
+        _log.info(f"[{element_id}] ERROR:")
+        _log.info(traceback.format_exc())
         return None
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s (%(name)s)",
+        datefmt="%H:%M:%S",
+    )
+    _log.error("Log ready")
+    _log.info("Log ready")
+
     import sys
 
     from ocp_vscode import show
 
     from dtools.workplane import Workplane
 
+    # path = Workplane("XY").lineTo(10, 10).lineTo(20, 5).lineTo(30, 15)
+    # body = Workplane("XZ").rect(10, 1).sweep(path)
+    # show(body)
+    # sk = Sketch().rect(2, 5).vertices(">X").fillet(1).fillet(1.5)
+
+    # path = Workplane().circle(20)
+
+    # result1 = Workplane("XZ", origin=(-20, 0, 0)).placeSketch(sk).sweep(path)
+    # result2 = Workplane("XZ", origin=(20, 0, 0)).placeSketch(sk).sweep(path)
+    # result3 = Workplane("YZ", origin=(0, -20, 0)).placeSketch(sk).sweep(path)
+    # result4 = Workplane("YZ", origin=(0, 20, 0)).placeSketch(sk).sweep(path)
+    # show(result3)
+    # exit(0)
+
     if len(sys.argv) < 2:
-        print("Usage: python -m dtools.svg <svg_path> [options]")
-        print("Options:")
-        print("  x_len=<value>          - Scale to width in mm")
-        print("  y_len=<value>          - Scale to height in mm")
-        print("  chamfer=<value>        - Chamfer both top and bottom edges")
-        print("  chamfer_top=<value>    - Chamfer top edges only")
-        print("  chamfer_bottom=<value> - Chamfer bottom edges only")
-        print("  height=<value>         - Extrusion height (default: 4)")
-        print("\nExamples:")
-        print("  python -m dtools.svg images/turnip.svg x_len=100")
-        print("  python -m dtools.svg images/turnip.svg x_len=100 chamfer=0.5")
-        print("  python -m dtools.svg images/turnip.svg x_len=100 chamfer_top=0.8")
-        print(
+        _log.info("Usage: python -m dtools.svg <svg_path> [options]")
+        _log.info("Options:")
+        _log.info("  x_len=<value>          - Scale to width in mm")
+        _log.info("  y_len=<value>          - Scale to height in mm")
+        _log.info("  chamfer=<value>        - Chamfer both top and bottom edges")
+        _log.info("  chamfer_top=<value>    - Chamfer top edges only")
+        _log.info("  chamfer_bottom=<value> - Chamfer bottom edges only")
+        _log.info("  height=<value>         - Extrusion height (default: 4)")
+        _log.info("\nExamples:")
+        _log.info("  python -m dtools.svg images/turnip.svg x_len=100")
+        _log.info("  python -m dtools.svg images/turnip.svg x_len=100 chamfer=0.5")
+        _log.info("  python -m dtools.svg images/turnip.svg x_len=100 chamfer_top=0.8")
+        _log.info(
             "  python -m dtools.svg images/turnip.svg y_len=50 "
             "chamfer_bottom=0.3 height=10"
         )
